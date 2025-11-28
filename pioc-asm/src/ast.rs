@@ -1,13 +1,10 @@
 use pioc_core::OpCode;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Statement {
-    Include(String),
-    Org(u16),
-    RawWord(u16),
+pub enum Stmt {
     Define(String, String),
-    Label(String),
-    Instruction(OpCode),
-    End,
-    RawAssembly(String), // unparsed
+    Origin(u16),
+    Include(String),
+    /// Optional label, and opcode
+    Inst(Option<String>, OpCode),
 }

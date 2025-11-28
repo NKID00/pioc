@@ -1,30 +1,10 @@
+mod assemble;
 mod ast;
-mod parser;
+mod parse;
 
+pub use assemble::*;
 pub use ast::*;
-pub use parser::*;
-
-use thiserror::Error;
-
-#[derive(Debug, Error)]
-pub enum ParseError {
-    #[error("invalid op code")]
-    InvalidOpCode,
-}
-
-pub fn parse(asm: impl AsRef<str>) -> Result<Vec<Statement>, ParseError> {
-    todo!()
-}
-
-#[derive(Debug, Error)]
-pub enum AssembleError {
-    #[error("invalid op code")]
-    InvalidOpCode,
-}
-
-pub fn assemble(prog: &[Statement]) -> Result<Vec<u16>, AssembleError> {
-    todo!()
-}
+pub use parse::*;
 
 #[cfg(test)]
 mod tests {
@@ -35,10 +15,7 @@ mod tests {
     fn test_parse() {
         assert_eq!(
             parse("NOP\nNOP").unwrap(),
-            vec![
-                Statement::Instruction(OpCode::Nop),
-                Statement::Instruction(OpCode::Nop)
-            ]
+            vec![Stmt::Inst(None, OpCode::Nop), Stmt::Inst(None, OpCode::Nop)]
         );
     }
 
@@ -46,8 +23,8 @@ mod tests {
     fn test_assemble() {
         assert_eq!(
             assemble(&vec![
-                Statement::Instruction(OpCode::Nop),
-                Statement::Instruction(OpCode::Nop)
+                Stmt::Inst(None, OpCode::Nop),
+                Stmt::Inst(None, OpCode::Nop)
             ])
             .unwrap(),
             vec![0, 0]
