@@ -1,0 +1,9 @@
+[package]
+name = "pioc-asm"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+pioc-core = { path = "../pioc-core" }
+nom = "8"
+thiserror = "2"

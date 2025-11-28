@@ -107,13 +107,13 @@ pub struct BitOut(pub U2);
 
 impl BitOut {
     pub(crate) fn to_inst_part(self) -> u16 {
-        (self.0 .0 as u16) << 3
+        (self.0.0 as u16) << 3
     }
 }
 
 impl fmt::Display for BitOut {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.0 .0 {
+        match self.0.0 {
             0 => write!(f, "Status[FLAG_C]"),
             1 => write!(f, "BitCycle[TX_O0]"),
             2 => write!(f, "PortIO[OUT0]"),
@@ -134,13 +134,13 @@ pub struct BitIn(pub U2);
 
 impl BitIn {
     pub(crate) fn to_inst_part(self) -> u16 {
-        (self.0 .0 as u16) << 3
+        (self.0.0 as u16) << 3
     }
 }
 
 impl fmt::Display for BitIn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.0 .0 {
+        match self.0.0 {
             0 => write!(f, "Status[FLAG_C]"),
             1 => write!(f, "BitCycle[RX_I0]"),
             2 => write!(f, "PortIO[IN0]"),
@@ -161,13 +161,13 @@ pub struct BitInC(pub U2);
 
 impl BitInC {
     pub(crate) fn to_inst_part(self) -> u16 {
-        self.0 .0 as u16
+        self.0.0 as u16
     }
 }
 
 impl fmt::Display for BitInC {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.0 .0 {
+        match self.0.0 {
             0 => write!(f, "XOR_IN0"),
             1 => write!(f, "BitCycle[RX_I0]"),
             2 => write!(f, "PortIO[IN0]"),
@@ -192,7 +192,7 @@ pub struct WaitBit(pub U3);
 
 impl fmt::Display for WaitBit {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.0 .0 {
+        match self.0.0 {
             0 => write!(f, "WB_DATA_SW_MR_0"),
             1 => write!(f, "WB_BIT_CYC_TAIL_1"),
             2 => write!(f, "WB_PORT_I0_FALL"),
@@ -230,13 +230,13 @@ impl fmt::Display for Reg<u8> {
 }
 impl fmt::Display for Reg<U9> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.0 .0 <= 0xff {
-            match Sfr::try_from(self.0 .0 as u8) {
+        if self.0.0 <= 0xff {
+            match Sfr::try_from(self.0.0 as u8) {
                 Ok(sfr) => write!(f, "{sfr}"),
-                Err(_) => write!(f, "{:#03x}", self.0 .0),
+                Err(_) => write!(f, "{:#03x}", self.0.0),
             }
         } else {
-            write!(f, "{:#03x}", self.0 .0)
+            write!(f, "{:#03x}", self.0.0)
         }
     }
 }

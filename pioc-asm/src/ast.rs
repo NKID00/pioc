@@ -1,8 +1,4 @@
-use crate::OpCode;
-
-pub struct Program {
-    pub code: Vec<u16>,
-}
+use pioc_core::OpCode;
 
 pub enum Statement {
     Include(String),

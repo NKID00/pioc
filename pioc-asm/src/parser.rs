@@ -1,4 +1,4 @@
-use crate::{OpCode, U2};
+use pioc_core::{OpCode, U2};
 
 pub fn parse_line(line: &str) -> Result<OpCode, String> {
     let parts: Vec<&str> = line.split_whitespace().collect();
