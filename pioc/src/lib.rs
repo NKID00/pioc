@@ -452,7 +452,7 @@ impl OpCode {
             0b00100011 => MoveImmToPortDir(k),
             0b00100101 => MoveImmToPortIo(k),
             0b00100110 => MoveImmToP2(k),
-            0b00100111 => MoveImmToP2(k),
+            0b00100111 => MoveImmToP1(k),
 
             x if x & 0b1111111_0 == 0b0010001_0 => MoveImmToIndirAddr1(word.into()),
             x if x & 0b111111_00 == 0b001001_00 => MoveImmToIndirAddr2(word.into()),
@@ -503,6 +503,22 @@ impl OpCode {
             x if x & 0b11111_000 == 0b01011_000 => BitTestSkipIfSet(Reg(k), x.into()),
 
             _ => unimplemented!("Unknown opcode: {word:#04x} {word:#016b}"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::panic;
+
+    #[test]
+    fn exhaust_opcode_except_low_2_bits() {
+        for i in (0..=0x3fff).map(|i| i << 2) {
+            let Ok(opcode) = panic::catch_unwind(|| OpCode::from_word(i)) else {
+                continue;
+            };
+            assert_eq!(opcode.to_word(), i);
         }
     }
 }
