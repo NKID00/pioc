@@ -1,5 +1,6 @@
 use pioc_core::OpCode;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Statement {
     Include(String),
     Org(u16),
