@@ -1,5 +1,3 @@
-
-
 [workspace]
-members = ["pioc-parser", "pioc"]
+members = ["pioc"]
 resolver = "2"

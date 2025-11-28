@@ -11,6 +11,8 @@ fn main() {
         let opcode = OpCode::from_word(word);
         println!("{}: 0x{:04X} {:?}", i, word, opcode);
 
+        assert_eq!(opcode.to_word(), word);
+
         program.push(opcode);
     }
 

@@ -1,8 +1,8 @@
-use std::fmt;
-
 /// Special Function Registers, 0x00 to 0x3F
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum SFR {
+#[derive(Clone, Copy, PartialEq, Eq, Debug, strum::FromRepr, strum::Display, strum::EnumString)]
+#[repr(u8)]
+pub enum Sfr {
+    #[strum(serialize = "PC", to_string = "SFR_PRG_COUNT")]
     ProgramCounter = 0x02,
     /// Status Register (SR)
     /// SR.TR (SB_EN_TOUT_RST): Timeout Reset Enable
@@ -11,15 +11,21 @@ pub enum SFR {
     /// SR.Z (SB_FLAG_Z): Zero Flag
     /// SR.GX (SB_GP_BIT_X): General Purpose Bit X
     /// SR.C (SB_FLAG_C): Carry Flag
+    #[strum(serialize = "SR", to_string = "SFR_STATUS_REG")]
     Status = 0x03,
 
+    #[strum(serialize = "IP1", to_string = "SFR_INDIR_PORT")]
     IndirPort1 = 0x00,
+    #[strum(serialize = "IP2", to_string = "SFR_INDIR_PORT2")]
     IndirPort2 = 0x01,
     /// Indirect Address Register 1, aka. F1
+    #[strum(serialize = "IA1", to_string = "SFR_INDIR_ADDR")]
     IndirAddr1 = 0x04,
     /// Indirect Address Register 2, auto-incremented after each access
+    #[strum(serialize = "IA2", to_string = "SFR_INDIR_ADDR2")]
     IndirAddr2 = 0x09,
 
+    #[strum(serialize = "TMRCNT", to_string = "SFR_TMR0_COUNT")]
     TimerCount = 0x05,
     /// Timer Control Register (TMRCTL)
     /// TMRCTL.L1E (SB_EN_LEVEL1): Enable Level 1
@@ -30,7 +36,9 @@ pub enum SFR {
     /// TMRCTL.T0F2 (SB_TMR0_FREQ2): Timer 0 Frequency Bit 2
     /// TMRCTL.T0F1 (SB_TMR0_FREQ1): Timer 0 Frequency Bit 1
     /// TMRCTL.T0F0 (SB_TMR0_FREQ0): Timer 0 Frequency Bit 0
+    #[strum(serialize = "TMRCTL", to_string = "SFR_TIMER_CTRL")]
     TimerCtrl = 0x06,
+    #[strum(serialize = "TMRINIT", to_string = "SFR_TMR0_INIT")]
     TimerInit = 0x07,
     /// Encoding Bit Period Register, readable and writable by Host MCU
     /// Bit Cycle Register (BITCYC)
@@ -42,6 +50,7 @@ pub enum SFR {
     /// BITCYC.C2 (SB_BIT_CYCLE_2): Bit Cycle 2
     /// BITCYC.C1 (SB_BIT_CYCLE_1): Bit Cycle 1
     /// BITCYC.C0 (SB_BIT_CYCLE_0): Bit Cycle 0
+    #[strum(serialize = "BITCYC", to_string = "SFR_BIT_CYCLE")]
     BitCycle = 0x08,
     /// Port Direction Register (PDIR)
     /// PDIR.M3 (SB_PORT_MOD3): Port Mode 3
@@ -52,6 +61,7 @@ pub enum SFR {
     /// PDIR.PU0 (SB_PORT_PU0): Port Pull-Up 0
     /// PDIR.D1 (SB_PORT_DIR1): Port Direction 1
     /// PDIR.D0 (SB_PORT_DIR0): Port Direction 0
+    #[strum(serialize = "PDIR", to_string = "SFR_PORT_DIR")]
     PortDir = 0x0A,
     /// Port I/O Register (PIO)
     /// PIO.INXOR (SB_PORT_IN_XOR): Port Input XOR
@@ -62,6 +72,7 @@ pub enum SFR {
     /// PIO.XOR0 (SB_PORT_XOR0): Port XOR 0
     /// PIO.OUT1 (SB_PORT_OUT1): Port Output 1
     /// PIO.OUT0 (SB_PORT_OUT0): Port Output 0
+    #[strum(serialize = "PIO", to_string = "SFR_PORT_IO")]
     PortIO = 0x0B,
 
     /// Bit Configuration Register (BITCFG)
@@ -73,6 +84,7 @@ pub enum SFR {
     /// BITCFG.CC5 (SB_BIT_CYC_CNT5): Bit Cycle Count 5
     /// BITCFG.CC4 (SB_BIT_CYC_CNT4): Bit Cycle Count 4
     /// BITCFG.CC3 (SB_BIT_CYC_CNT3): Bit Cycle Count 3
+    #[strum(serialize = "BITCFG", to_string = "SFR_BIT_CONFIG")]
     BitConfig = 0x0C,
     /// System Configuration Register (SYSCFG)
     /// SYSCFG.INTQ (SB_INT_REQ): Interrupt Request
@@ -83,209 +95,87 @@ pub enum SFR {
     /// SYSCFG.MIO0 (SB_MST_IO_EN0): Master I/O Enable 0
     /// SYSCFG.MRST (SB_MST_RESET): Master Reset
     /// SYSCFG.MCLKG (SB_MST_CLK_GATE): Master Clock Gate
+    #[strum(serialize = "SYSCFG", to_string = "SFR_SYS_CFG")]
     SysConf = 0x1C,
+    #[strum(serialize = "CTLRD", to_string = "SFR_CTRL_RD")]
     CtrlRead = 0x1D,
+    #[strum(serialize = "CTLWR", to_string = "SFR_CTRL_WR")]
     CtrlWrite = 0x1E,
 
     /// Data Exchange Register, aka. F2
+    #[strum(serialize = "DEXCH", to_string = "SFR_DATA_EXCH")]
     DataExch = 0x1F,
 
+    #[strum(serialize = "D0", to_string = "SFR_DATA_REG0")]
     Data0 = 0x20,
+    #[strum(serialize = "D1", to_string = "SFR_DATA_REG1")]
     Data1 = 0x21,
+    #[strum(serialize = "D2", to_string = "SFR_DATA_REG2")]
     Data2 = 0x22,
+    #[strum(serialize = "D3", to_string = "SFR_DATA_REG3")]
     Data3 = 0x23,
+    #[strum(serialize = "D4", to_string = "SFR_DATA_REG4")]
     Data4 = 0x24,
+    #[strum(serialize = "D5", to_string = "SFR_DATA_REG5")]
     Data5 = 0x25,
+    #[strum(serialize = "D6", to_string = "SFR_DATA_REG6")]
     Data6 = 0x26,
+    #[strum(serialize = "D7", to_string = "SFR_DATA_REG7")]
     Data7 = 0x27,
+    #[strum(serialize = "D8", to_string = "SFR_DATA_REG8")]
     Data8 = 0x28,
+    #[strum(serialize = "D9", to_string = "SFR_DATA_REG9")]
     Data9 = 0x29,
+    #[strum(serialize = "D10", to_string = "SFR_DATA_REG10")]
     Data10 = 0x2A,
+    #[strum(serialize = "D11", to_string = "SFR_DATA_REG11")]
     Data11 = 0x2B,
+    #[strum(serialize = "D12", to_string = "SFR_DATA_REG12")]
     Data12 = 0x2C,
+    #[strum(serialize = "D13", to_string = "SFR_DATA_REG13")]
     Data13 = 0x2D,
+    #[strum(serialize = "D14", to_string = "SFR_DATA_REG14")]
     Data14 = 0x2E,
+    #[strum(serialize = "D15", to_string = "SFR_DATA_REG15")]
     Data15 = 0x2F,
+    #[strum(serialize = "D16", to_string = "SFR_DATA_REG16")]
     Data16 = 0x30,
+    #[strum(serialize = "D17", to_string = "SFR_DATA_REG17")]
     Data17 = 0x31,
+    #[strum(serialize = "D18", to_string = "SFR_DATA_REG18")]
     Data18 = 0x32,
+    #[strum(serialize = "D19", to_string = "SFR_DATA_REG19")]
     Data19 = 0x33,
+    #[strum(serialize = "D20", to_string = "SFR_DATA_REG20")]
     Data20 = 0x34,
+    #[strum(serialize = "D21", to_string = "SFR_DATA_REG21")]
     Data21 = 0x35,
+    #[strum(serialize = "D22", to_string = "SFR_DATA_REG22")]
     Data22 = 0x36,
+    #[strum(serialize = "D23", to_string = "SFR_DATA_REG23")]
     Data23 = 0x37,
+    #[strum(serialize = "D24", to_string = "SFR_DATA_REG24")]
     Data24 = 0x38,
+    #[strum(serialize = "D25", to_string = "SFR_DATA_REG25")]
     Data25 = 0x39,
+    #[strum(serialize = "D26", to_string = "SFR_DATA_REG26")]
     Data26 = 0x3A,
+    #[strum(serialize = "D27", to_string = "SFR_DATA_REG27")]
     Data27 = 0x3B,
+    #[strum(serialize = "D28", to_string = "SFR_DATA_REG28")]
     Data28 = 0x3C,
+    #[strum(serialize = "D29", to_string = "SFR_DATA_REG29")]
     Data29 = 0x3D,
+    #[strum(serialize = "D30", to_string = "SFR_DATA_REG30")]
     Data30 = 0x3E,
+    #[strum(serialize = "D31", to_string = "SFR_DATA_REG31")]
     Data31 = 0x3F,
-
-    Error = 0xFF,
 }
 
-/// Display as the same as Debug
-impl fmt::Display for SFR {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // write!(f, "SFR::{:?}", self)
-        write!(f, "${}", self.to_name())
-    }
-}
+impl TryFrom<u8> for Sfr {
+    type Error = ();
 
-impl SFR {
-    pub fn from_u8(val: u8) -> Self {
-        if val <= 0x3f {
-            unsafe { std::mem::transmute(val) }
-        } else {
-            SFR::Error
-        }
-    }
-
-    pub fn to_name(&self) -> &'static str {
-        match self {
-            SFR::ProgramCounter => "PC",
-            SFR::Status => "SR",
-            SFR::IndirPort1 => "IP1",
-            SFR::IndirPort2 => "IP2",
-            SFR::IndirAddr1 => "IA1",
-            SFR::IndirAddr2 => "IA2",
-            SFR::TimerCount => "TMRCNT",
-            SFR::TimerCtrl => "TMRCTL",
-            SFR::TimerInit => "TMRINIT",
-            SFR::BitCycle => "BITCYC",
-            SFR::PortDir => "PDIR",
-            SFR::PortIO => "PIO",
-            SFR::BitConfig => "BITCFG",
-            SFR::SysConf => "SYSCFG",
-            SFR::CtrlRead => "CTLRD",
-            SFR::CtrlWrite => "CTLWR",
-            SFR::DataExch => "DEXCH",
-            SFR::Data0 => "D0",
-            SFR::Data1 => "D1",
-            SFR::Data2 => "D2",
-            SFR::Data3 => "D3",
-            SFR::Data4 => "D4",
-            SFR::Data5 => "D5",
-            SFR::Data6 => "D6",
-            SFR::Data7 => "D7",
-            SFR::Data8 => "D8",
-            SFR::Data9 => "D9",
-            SFR::Data10 => "D10",
-            SFR::Data11 => "D11",
-            SFR::Data12 => "D12",
-            SFR::Data13 => "D13",
-            SFR::Data14 => "D14",
-            SFR::Data15 => "D15",
-            SFR::Data16 => "D16",
-            SFR::Data17 => "D17",
-            SFR::Data18 => "D18",
-            SFR::Data19 => "D19",
-            SFR::Data20 => "D20",
-            SFR::Data21 => "D21",
-            SFR::Data22 => "D22",
-            SFR::Data23 => "D23",
-            SFR::Data24 => "D24",
-            SFR::Data25 => "D25",
-            SFR::Data26 => "D26",
-            SFR::Data27 => "D27",
-            SFR::Data28 => "D28",
-            SFR::Data29 => "D29",
-            SFR::Data30 => "D30",
-            SFR::Data31 => "D31",
-            SFR::Error => "ERR",
-        }
-    }
-
-    // ... (保留之前的 to_name 函数)
-
-    pub fn parse(s: &str) -> Option<SFR> {
-        match s.to_uppercase().as_str() {
-            "PC" => Some(SFR::ProgramCounter),
-            "SR" => Some(SFR::Status),
-            "IP1" => Some(SFR::IndirPort1),
-            "IP2" => Some(SFR::IndirPort2),
-            "IA1" => Some(SFR::IndirAddr1),
-            "IA2" => Some(SFR::IndirAddr2),
-            "TMRCNT" => Some(SFR::TimerCount),
-            "TMRCTL" => Some(SFR::TimerCtrl),
-            "TMRINIT" => Some(SFR::TimerInit),
-            "BITCYC" => Some(SFR::BitCycle),
-            "PDIR" => Some(SFR::PortDir),
-            "PIO" => Some(SFR::PortIO),
-            "BITCFG" => Some(SFR::BitConfig),
-            "SYSCFG" => Some(SFR::SysConf),
-            "CTLRD" => Some(SFR::CtrlRead),
-            "CTLWR" => Some(SFR::CtrlWrite),
-            "DEXCH" => Some(SFR::DataExch),
-            s if s.starts_with('D') => {
-                if let Ok(num) = s[1..].parse::<u8>() {
-                    match num {
-                        0..=31 => Some(unsafe { std::mem::transmute(0x20 + num) }),
-                        _ => None,
-                    }
-                } else {
-                    None
-                }
-            }
-            "ERR" => Some(SFR::Error),
-            _ => None,
-        }
-    }
-
-    pub fn to_wch_risc8b_name(&self) -> &'static str {
-        match *self as u8 {
-            0x00 => "SFR_INDIR_PORT",
-            0x01 => "SFR_INDIR_PORT2",
-            0x02 => "SFR_PRG_COUNT",
-            0x03 => "SFR_STATUS_REG",
-            0x04 => "SFR_INDIR_ADDR",
-            0x05 => "SFR_TMR0_COUNT",
-            0x06 => "SFR_TIMER_CTRL",
-            0x07 => "SFR_TMR0_INIT",
-            0x08 => "SFR_BIT_CYCLE",
-            0x09 => "SFR_INDIR_ADDR2",
-            0x0A => "SFR_PORT_DIR",
-            0x0B => "SFR_PORT_IO",
-            0x0C => "SFR_BIT_CONFIG",
-            0x1C => "SFR_SYS_CFG",
-            0x1D => "SFR_CTRL_RD",
-            0x1E => "SFR_CTRL_WR",
-            0x1F => "SFR_DATA_EXCH",
-            0x20 => "SFR_DATA_REG0",
-            0x21 => "SFR_DATA_REG1",
-            0x22 => "SFR_DATA_REG2",
-            0x23 => "SFR_DATA_REG3",
-            0x24 => "SFR_DATA_REG4",
-            0x25 => "SFR_DATA_REG5",
-            0x26 => "SFR_DATA_REG6",
-            0x27 => "SFR_DATA_REG7",
-            0x28 => "SFR_DATA_REG8",
-            0x29 => "SFR_DATA_REG9",
-            0x2A => "SFR_DATA_REG10",
-            0x2B => "SFR_DATA_REG11",
-            0x2C => "SFR_DATA_REG12",
-            0x2D => "SFR_DATA_REG13",
-            0x2E => "SFR_DATA_REG14",
-            0x2F => "SFR_DATA_REG15",
-            0x30 => "SFR_DATA_REG16",
-            0x31 => "SFR_DATA_REG17",
-            0x32 => "SFR_DATA_REG18",
-            0x33 => "SFR_DATA_REG19",
-            0x34 => "SFR_DATA_REG20",
-            0x35 => "SFR_DATA_REG21",
-            0x36 => "SFR_DATA_REG22",
-            0x37 => "SFR_DATA_REG23",
-            0x38 => "SFR_DATA_REG24",
-            0x39 => "SFR_DATA_REG25",
-            0x3A => "SFR_DATA_REG26",
-            0x3B => "SFR_DATA_REG27",
-            0x3C => "SFR_DATA_REG28",
-            0x3D => "SFR_DATA_REG29",
-            0x3E => "SFR_DATA_REG30",
-            0x3F => "SFR_DATA_REG31",
-            _ => "!!SFR_ERROR!!",
-        }
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        Self::from_repr(value).ok_or(())
     }
 }

@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::regs::SFR;
+use crate::regs::Sfr;
 
 macro_rules! define_bit_type {
     ($name:ident, $bits:expr, $inner:ty) => {
@@ -9,7 +9,7 @@ macro_rules! define_bit_type {
 
         impl $name {
             pub const fn new(value: $inner) -> Option<Self> {
-                if value & ((1 << $bits) - 1) == value {
+                if value < (1 << $bits) {
                     Some(Self(value))
                 } else {
                     None
@@ -45,6 +45,13 @@ macro_rules! define_bit_type {
 
 define_bit_type!(U2, 2, u8);
 define_bit_type!(U3, 3, u8);
+
+impl U3 {
+    pub(crate) fn to_inst_part(self) -> u16 {
+        (self.0 as u16) << 8
+    }
+}
+
 define_bit_type!(U7, 7, u8);
 define_bit_type!(U9, 9, u16);
 define_bit_type!(U10, 10, u16);
@@ -57,6 +64,15 @@ define_bit_type!(U12, 12, u16);
 pub enum Dest {
     A,
     F,
+}
+
+impl Dest {
+    pub(crate) fn to_inst_part(self) -> u16 {
+        match self {
+            Dest::A => 0x0000,
+            Dest::F => 0x1000,
+        }
+    }
 }
 
 impl From<bool> for Dest {
@@ -89,6 +105,12 @@ impl fmt::Display for Dest {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BitOut(pub U2);
 
+impl BitOut {
+    pub(crate) fn to_inst_part(self) -> u16 {
+        (self.0 .0 as u16) << 3
+    }
+}
+
 impl fmt::Display for BitOut {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 .0 {
@@ -110,6 +132,12 @@ impl fmt::Display for BitOut {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BitIn(pub U2);
 
+impl BitIn {
+    pub(crate) fn to_inst_part(self) -> u16 {
+        (self.0 .0 as u16) << 3
+    }
+}
+
 impl fmt::Display for BitIn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 .0 {
@@ -130,6 +158,12 @@ impl fmt::Display for BitIn {
 /// - BI_PORT_IN1
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BitInC(pub U2);
+
+impl BitInC {
+    pub(crate) fn to_inst_part(self) -> u16 {
+        self.0 .0 as u16
+    }
+}
 
 impl fmt::Display for BitInC {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -186,25 +220,23 @@ impl<T: fmt::Display> fmt::Display for Label<T> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Reg<T>(pub T);
 
-impl Reg<U9> {
-    pub fn normalize(&self) -> Reg<u8> {
-        Reg(self.0 .0 as u8)
-    }
-}
-
 impl fmt::Display for Reg<u8> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.to_sfr())
+        match Sfr::try_from(self.0) {
+            Ok(sfr) => write!(f, "{sfr}"),
+            Err(_) => write!(f, "{:#02x}", self.0),
+        }
     }
 }
 impl fmt::Display for Reg<U9> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.normalize().to_sfr())
-    }
-}
-
-impl Reg<u8> {
-    pub fn to_sfr(&self) -> SFR {
-        SFR::from_u8(self.0)
+        if self.0 .0 <= 0xff {
+            match Sfr::try_from(self.0 .0 as u8) {
+                Ok(sfr) => write!(f, "{sfr}"),
+                Err(_) => write!(f, "{:#03x}", self.0 .0),
+            }
+        } else {
+            write!(f, "{:#03x}", self.0 .0)
+        }
     }
 }

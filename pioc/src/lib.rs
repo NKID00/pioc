@@ -1,8 +1,5 @@
-#![allow(non_camel_case_types)]
+#![allow(clippy::unusual_byte_groupings)]
 
-use core::fmt;
-
-use regs::SFR;
 pub mod ast;
 pub mod parser;
 pub mod regs;
@@ -132,7 +129,7 @@ pub enum OpCode {
     // 0010001k kkkkkkkk
     MoveImmToIndirAddr1(U9),
     /// MOVIA k10
-    // k10→SFR_INDIR_ADDR2
+    // k10->SFR_INDIR_ADDR2
     // 001001kk kkkkkkkk
     MoveImmToIndirAddr2(U10),
 
@@ -254,239 +251,258 @@ pub enum OpCode {
 }
 
 impl OpCode {
-    pub fn to_bytes(&self) -> [u8; 2] {
+    pub fn to_word(&self) -> u16 {
+        use OpCode::*;
         match self {
-            OpCode::Nop => [0, 0],
-            OpCode::ClearWatchDog => [0x00, 0b00001000],
-            OpCode::Sleep(k2) => [0x00, 0b00001100 | (k2.0 & 0b11)],
-            OpCode::WaitB(b) => [0x00, 0b00010000 | (b.0 .0)],
-            OpCode::PushA => [0x00, 0b00100000],
-            OpCode::PopA => [0x00, 0b00100100],
-            _ => todo!(),
+            Nop => 0x0000,
+            ClearWatchDog => 0x0008,
+            Sleep(k2) => 0x000c | k2.0 as u16,
+            WaitB(b) => 0x0010 | b.0 .0 as u16,
+            ReadCode(k2) => 0x0018 | k2.0 as u16,
+            PushA => 0x0020,
+            PopA => 0x0024,
+            PushIndirAddr2 => 0x0028,
+            PopIndirAddr2 => 0x002c,
+            Return => 0x0030,
+            ReturnOk => 0x0034,
+            ReturnInt => 0x0038,
+            ReturnImm(k) => 0x2000 | *k as u16,
+            ReturnErrImm(k) => 0x2100 | *k as u16,
+            ClearA => 0x0004,
+            Clear(f) => 0x0100 | f.0 as u16,
+            MoveA(f) => 0x1000 | f.0 .0,
+            Move(f, d) => 0x0200 | f.0 .0 | d.to_inst_part(),
+            Inc(f, d) => 0x0400 | f.0 as u16 | d.to_inst_part(),
+            Dec(f, d) => 0x0500 | f.0 as u16 | d.to_inst_part(),
+            IncAndSkipIfZero(f, d) => 0x0600 | f.0 as u16 | d.to_inst_part(),
+            DecAndSkipIfZero(f, d) => 0x0700 | f.0 as u16 | d.to_inst_part(),
+            SwapHalfBytes(f, d) => 0x0800 | f.0 as u16 | d.to_inst_part(),
+            And(f, d) => 0x0900 | f.0 as u16 | d.to_inst_part(),
+            Or(f, d) => 0x0a00 | f.0 as u16 | d.to_inst_part(),
+            Xor(f, d) => 0x0b00 | f.0 as u16 | d.to_inst_part(),
+            Add(f, d) => 0x0c00 | f.0 as u16 | d.to_inst_part(),
+            Sub(f, d) => 0x0d00 | f.0 as u16 | d.to_inst_part(),
+            RotateLeftWithCarry(f, d) => 0x0e00 | f.0 as u16 | d.to_inst_part(),
+            RotateRightWithCarry(f, d) => 0x0f00 | f.0 as u16 | d.to_inst_part(),
+            MoveImmToIndirAddr1(k) => 0x2200 | k.0,
+            MoveImmToIndirAddr2(k) => 0x2400 | k.0,
+            MoveImmToPortDir(k) => 0x2300 | *k as u16,
+            MoveImmToPortIo(k) => 0x2500 | *k as u16,
+            MoveImmToP1(k) => 0x2700 | *k as u16,
+            MoveImmToP2(k) => 0x2600 | *k as u16,
+            MoveImm(k) => 0x2800 | *k as u16,
+            AndImm(k) => 0x2900 | *k as u16,
+            OrImm(k) => 0x2a00 | *k as u16,
+            XorImm(k) => 0x2b00 | *k as u16,
+            AddImm(k) => 0x2c00 | *k as u16,
+            SubImm(k) => 0x2d00 | *k as u16,
+            CompareImmNegate(k) => 0x2e00 | *k as u16,
+            CompareImm(k) => 0x2f00 | *k as u16,
+            BitClear(f, b) => 0x4000 | b.to_inst_part() | f.0 as u16,
+            BitSet(f, b) => 0x4800 | b.to_inst_part() | f.0 as u16,
+            BitTestSkipIfClear(f, b) => 0x5000 | b.to_inst_part() | f.0 as u16,
+            BitTestSkipIfSet(f, b) => 0x5800 | b.to_inst_part() | f.0 as u16,
+            BitToC(a) => 0x001c | a.to_inst_part(),
+            BitOut1(a, b) => 0x0080 | a.to_inst_part() | b.0 as u16,
+            BitOut2(a, b) => 0x00a0 | a.to_inst_part() | b.0 as u16,
+            BitIn1(a, b) => 0x00c0 | a.to_inst_part() | b.0 as u16,
+            BitIn2(a, b) => 0x00e0 | a.to_inst_part() | b.0 as u16,
+            Jump(k) => 0x6000 | k.0 .0,
+            Call(k) => 0x7000 | k.0 .0,
+            JumpIfNotZero(k) => 0x3000 | k.0 .0,
+            JumpIfZero(k) => 0x3400 | k.0 .0,
+            JumpIfNotCarry(k) => 0x3800 | k.0 .0,
+            JumpIfCarry(k) => 0x3c00 | k.0 .0,
+            JumpIfEqual(k1, k2) => 0x8000 | ((k1.0 as u16) << 8) | k2.0 as u16,
+            Unknown(op) => *op,
         }
     }
 
     pub fn to_wch_risc8b_asm(&self) -> String {
+        use OpCode::*;
         match self {
-            OpCode::Nop => format!("NOP"),
-            OpCode::ClearWatchDog => format!("CLRWDT"),
-            OpCode::Sleep(k2) => format!("SLEEPX {}", k2),
-            OpCode::WaitB(b) => format!("WAITB {}", b),
-            OpCode::PushA => format!("PUSHA"),
-            OpCode::PopA => format!("POPA"),
-            OpCode::ReadCode(k2) => format!("RCODE {}", k2),
-            OpCode::Return => format!("RET"),
-            OpCode::ReturnOk => format!("RETZ"),
-            OpCode::ReturnInt => format!("RETIE"),
-            OpCode::ReturnImm(k) => format!("RETL {}", k),
-            OpCode::ReturnErrImm(k) => format!("RETLN {}", k),
-            OpCode::ClearA => format!("CLRA"),
-            OpCode::Clear(f) => format!("CLR {}\t; 0x00->{0}, 1->Z", f),
-            OpCode::MoveA(f) => format!("MOVA {}\t; A->{0}", f),
-            OpCode::Move(f, d) => format!("MOV {}, {}\t; {0}->{1}", f, d),
-            OpCode::Inc(f, d) => format!("INC {}, {}\t; {0}+1->{1}", f, d),
-            OpCode::Dec(f, d) => format!("DEC {}, {}\t; {0}-1->{1}", f, d),
-            OpCode::IncAndSkipIfZero(f, d) => {
-                format!("INCSZ {}, {}\t; {0}+1->{1}, skip if Z", f, d)
+            Nop => "NOP".to_string(),
+            ClearWatchDog => "CLRWDT".to_string(),
+            Sleep(k2) => format!("SLEEPX {k2}"),
+            WaitB(b) => format!("WAITB {b}"),
+            PushA => "PUSHA".to_string(),
+            PopA => "POPA".to_string(),
+            ReadCode(k2) => format!("RCODE {k2}"),
+            Return => "RET".to_string(),
+            ReturnOk => "RETZ".to_string(),
+            ReturnInt => "RETIE".to_string(),
+            ReturnImm(k) => format!("RETL {k}"),
+            ReturnErrImm(k) => format!("RETLN {k}"),
+            ClearA => "CLRA".to_string(),
+            Clear(f) => format!("CLR {f}\t; 0x00->{f}, 1->Z"),
+            MoveA(f) => format!("MOVA {f}\t; A->{f}"),
+            Move(f, d) => format!("MOV {f}, {d}\t; {f}->{d}"),
+            Inc(f, d) => format!("INC {f}, {d}\t; {f}+1->{d}"),
+            Dec(f, d) => format!("DEC {f}, {d}\t; {f}-1->{d}"),
+            IncAndSkipIfZero(f, d) => {
+                format!("INCSZ {f}, {d}\t; {f}+1->{d}, skip if Z")
             }
-            OpCode::DecAndSkipIfZero(f, d) => {
-                format!("DECSZ {}, {}\t; {0}-1->{1}, skip if Z", f, d)
+            DecAndSkipIfZero(f, d) => {
+                format!("DECSZ {f}, {d}\t; {f}-1->{d}, skip if Z")
             }
-            OpCode::SwapHalfBytes(f, d) => {
-                format!("SWAP {}, {}\t; {0}[3:0]<=>{0}[7:4] -> {1}", f, d)
+            SwapHalfBytes(f, d) => {
+                format!("SWAP {f}, {d}\t; {f}[3:0]<=>{f}[7:4] -> {d}")
             }
-            OpCode::And(f, d) => format!("AND {}, {}\t; {0}&A->{1}", f, d),
-            OpCode::Or(f, d) => format!("IOR {}, {}\t; {0}|A->{1}", f, d),
-            OpCode::Xor(f, d) => format!("XOR {}, {}\t; {0}^A->{1}", f, d),
-            OpCode::Add(f, d) => format!("ADD {}, {}\t; {0}+A->{1}", f, d),
-            OpCode::Sub(f, d) => format!("SUB {}, {}\t; {0}-A->{1}", f, d),
-            OpCode::RotateLeftWithCarry(f, d) => {
-                format!("RCL {}, {}\t; {{{0},C}}<<1->{1},{0}[7]->C", f, d)
+            And(f, d) => format!("AND {f}, {d}\t; {f}&A->{d}"),
+            Or(f, d) => format!("IOR {f}, {d}\t; {f}|A->{d}"),
+            Xor(f, d) => format!("XOR {f}, {d}\t; {f}^A->{d}"),
+            Add(f, d) => format!("ADD {f}, {d}\t; {f}+A->{d}"),
+            Sub(f, d) => format!("SUB {f}, {d}\t; {f}-A->{d}"),
+            RotateLeftWithCarry(f, d) => {
+                format!("RCL {f}, {d}\t; {{{f},C}}<<1->{d},{f}[7]->C")
             }
-            OpCode::RotateRightWithCarry(f, d) => format!("RCR {}, {}", f, d),
+            RotateRightWithCarry(f, d) => {
+                format!("RCR {f}, {d}\t; {{{f},C}}>>1->{d},{f}[0]->C")
+            }
 
-            OpCode::MoveImmToIndirAddr1(j) => format!("MOVIP {}\t; {0}->SFR_INDIR_ADDR", j),
-            OpCode::MoveImmToIndirAddr2(k) => format!("MOVIA {}\t; {0}->SFR_INDIR_ADDR2", k),
-            OpCode::MoveImmToPortDir(k) => format!("MOVA1F {}\t; {0}->SFR_PORT_DIR", k),
-            OpCode::MoveImmToPortIo(k) => format!("MOVA2F {}\t; {0}->SFR_PORT_IO", k),
-            OpCode::MoveImmToP2(k) => format!("MOVA2P {}\t; {0}->@SFR_INDIR_ADDR2", k),
-            OpCode::MoveImmToP1(k) => format!("MOVA1P {}\t; {0}->@SFR_INDIR_ADDR", k),
+            MoveImmToIndirAddr1(k) => format!("MOVIP {k}\t; {k}->SFR_INDIR_ADDR"),
+            MoveImmToIndirAddr2(k) => format!("MOVIA {k}\t; {k}->SFR_INDIR_ADDR2"),
+            MoveImmToPortDir(k) => format!("MOVA1F {k}\t; {k}->SFR_PORT_DIR"),
+            MoveImmToPortIo(k) => format!("MOVA2F {k}\t; {k}->SFR_PORT_IO"),
+            MoveImmToP2(k) => format!("MOVA2P {k}\t; {k}->@SFR_INDIR_ADDR2"),
+            MoveImmToP1(k) => format!("MOVA1P {k}\t; {k}->@SFR_INDIR_ADDR"),
 
-            OpCode::MoveImm(k) => format!("MOVL {}\t; {0}->A", k),
-            OpCode::AndImm(k) => format!("ANDL {}\t; {0}&A->A", k),
-            OpCode::OrImm(k) => format!("IORL {}\t; {0}|A->A", k),
-            OpCode::XorImm(k) => format!("XORL {}\t; {0}^A->A", k),
-            OpCode::AddImm(k) => format!("ADDL {}\t; {0}+A->A", k),
-            OpCode::SubImm(k) => format!("SUBL {}\t; A-{0}->A", k),
-            OpCode::CompareImmNegate(k) => format!("CMPLN {}\t; {0}+A -> Z,C", k),
-            OpCode::CompareImm(k) => format!("CMPL {}\t; {0}-A -> Z,C", k),
-            OpCode::BitClear(f, b) => format!("BC {}, {}\t; 0->{0}[{1}]", f, b),
-            OpCode::BitSet(f, b) => format!("BS {}, {}\t; 1->{0}[{1}]", f, b),
-            OpCode::BitTestSkipIfClear(f, b) => format!("BTSC {}, {}\t; skip if {0}[{1}]==0", f, b),
-            OpCode::BitTestSkipIfSet(f, b) => format!("BTSS {}, {}\t; skip if {0}[{1}]==1", f, b),
-            OpCode::BitToC(a) => format!("BCTC {}\t; {0}->C", a),
-            OpCode::BitOut1(a, b) => {
-                format!("BP1F {}, {}\t; SFR_INDIR_ADDR[{1}]-> {0}", a, b)
+            MoveImm(k) => format!("MOVL {k}\t; {k}->A"),
+            AndImm(k) => format!("ANDL {k}\t; {k}&A->A"),
+            OrImm(k) => format!("IORL {k}\t; {k}|A->A"),
+            XorImm(k) => format!("XORL {k}\t; {k}^A->A"),
+            AddImm(k) => format!("ADDL {k}\t; {k}+A->A"),
+            SubImm(k) => format!("SUBL {k}\t; A-{k}->A"),
+            CompareImmNegate(k) => format!("CMPLN {k}\t; {k}+A -> Z,C"),
+            CompareImm(k) => format!("CMPL {k}\t; {k}-A -> Z,C"),
+            BitClear(f, b) => format!("BC {f}, {b}\t; 0->{f}[{b}]"),
+            BitSet(f, b) => format!("BS {f}, {b}\t; 1->{f}[{b}]"),
+            BitTestSkipIfClear(f, b) => format!("BTSC {f}, {b}\t; skip if {f}[{b}]==0"),
+            BitTestSkipIfSet(f, b) => format!("BTSS {f}, {b}\t; skip if {f}[{b}]==1"),
+            BitToC(a) => format!("BCTC {a}\t; {a}->C"),
+            BitOut1(a, b) => {
+                format!("BP1F {a}, {b}\t; SFR_INDIR_ADDR[{b}]->{a}")
             }
-            OpCode::BitOut2(a, b) => {
-                format!("BP2F {}, {}\t; SFR_DATA_EXCH[{1}]->{0}", a, b)
+            BitOut2(a, b) => {
+                format!("BP2F {a}, {b}\t; SFR_DATA_EXCH[{b}]->{a}")
             }
-            OpCode::BitIn1(a, b) => format!("BG1F {}, {}\t; {0}->SFR_INDIR_ADDR[{1}]", a, b),
-            OpCode::BitIn2(a, b) => format!("BG2F {}, {}\t; {0}->SFR_DATA_EXCH[{1}]", a, b),
+            BitIn1(a, b) => format!("BG1F {a}, {b}\t; {a}->SFR_INDIR_ADDR[{b}]"),
+            BitIn2(a, b) => format!("BG2F {a}, {b}\t; {a}->SFR_DATA_EXCH[{b}]"),
 
             // jumps
-            OpCode::Jump(k12) => format!("JMP {}", k12),
-            OpCode::Call(k12) => format!("CALL {}", k12),
-            OpCode::JumpIfNotZero(k) => format!("JNZ {}", k),
-            OpCode::JumpIfZero(k) => format!("JZ {}", k),
-            OpCode::JumpIfNotCarry(k) => format!("JNC {}", k),
-            OpCode::JumpIfCarry(k10) => format!("JC {}", k10),
-            OpCode::JumpIfEqual(k7, label) => {
-                format!("CMPZ {}, {}\t; {1}->PC[7:0] if A=={0}", k7, label)
+            Jump(k12) => format!("JMP {k12}"),
+            Call(k12) => format!("CALL {k12}"),
+            JumpIfNotZero(k) => format!("JNZ {k}"),
+            JumpIfZero(k) => format!("JZ {k}"),
+            JumpIfNotCarry(k) => format!("JNC {k}"),
+            JumpIfCarry(k10) => format!("JC {k10}"),
+            JumpIfEqual(k7, label) => {
+                format!("CMPZ {k7}, {label}\t; {label}->PC[7:0] if A=={k7}")
             }
-            OpCode::PushIndirAddr2 => format!("PUSHA2"),
-            OpCode::PopIndirAddr2 => format!("POPA2"),
-            OpCode::Unknown(_) => todo!(),
+            PushIndirAddr2 => "PUSHA2".to_string(),
+            PopIndirAddr2 => "POPA2".to_string(),
+            Unknown(op) => format!("DW {op:#04x}"),
         }
     }
 
     pub fn from_word(word: u16) -> OpCode {
+        use OpCode::*;
         let k = (word & 0xFF) as u8;
         match (word >> 8) as u8 {
-            0x00 if k & 0b111111_00 == 0x00 => OpCode::Nop,
-            0x00 if k & 0b111111_00 == 0b000010_00 => OpCode::ClearWatchDog,
-            0x00 if k & 0b111111_00 == 0b00001100 => OpCode::Sleep(k.into()),
-            0x00 if k & 0b111111_00 == 0b001000_00 => OpCode::PushA,
-            0x00 if k & 0b111111_00 == 0b001001_00 => OpCode::PopA,
-            0x00 if k & 0b111111_00 == 0b001010_00 => OpCode::PushIndirAddr2,
-            0x00 if k & 0b111111_00 == 0b001011_00 => OpCode::PopIndirAddr2,
+            0x00 if k & 0b111111_00 == 0x00 => Nop,
+            0x00 if k & 0b111111_00 == 0b000010_00 => ClearWatchDog,
+            0x00 if k & 0b111111_00 == 0b00001100 => Sleep(k.into()),
+            0x00 if k & 0b111111_00 == 0b001000_00 => PushA,
+            0x00 if k & 0b111111_00 == 0b001001_00 => PopA,
+            0x00 if k & 0b111111_00 == 0b001010_00 => PushIndirAddr2,
+            0x00 if k & 0b111111_00 == 0b001011_00 => PopIndirAddr2,
 
-            0x00 if k & 0b111111_00 == 0b001100_00 => OpCode::Return,
-            0x00 if k & 0b111111_00 == 0b001101_00 => OpCode::ReturnOk,
-            0x00 if k & 0b111111_00 == 0b001110_00 => OpCode::ReturnInt,
+            0x00 if k & 0b111111_00 == 0b001100_00 => Return,
+            0x00 if k & 0b111111_00 == 0b001101_00 => ReturnOk,
+            0x00 if k & 0b111111_00 == 0b001110_00 => ReturnInt,
 
-            0x00 if k & 0b11111000 == 0b00010_000 => OpCode::WaitB(WaitBit(k.into())),
-            0x00 if k & 0b111111_00 == 0b000001_00 => OpCode::ClearA,
+            0x00 if k & 0b11111000 == 0b00010_000 => WaitB(WaitBit(k.into())),
+            0x00 if k & 0b111111_00 == 0b000001_00 => ClearA,
 
-            0x00 if k & 0b111111_00 == 0b000111_00 => OpCode::BitToC(BitInC(k.into())),
-            0x00 if k & 0b111_00000 == 0b100_00_000 => {
-                OpCode::BitOut1(BitOut((k >> 3).into()), k.into())
-            }
-            0x00 if k & 0b111_00000 == 0b101_00_000 => {
-                OpCode::BitOut2(BitOut((k >> 3).into()), k.into())
-            }
-            0x00 if k & 0b111_00000 == 0b110_00_000 => {
-                OpCode::BitIn1(BitIn((k >> 3).into()), k.into())
-            }
-            0x00 if k & 0b111_00000 == 0b111_00_000 => {
-                OpCode::BitIn2(BitIn((k >> 3).into()), k.into())
-            }
-            0x00 if k & 0b111111_00 == 0b000110_00 => OpCode::ReadCode(k.into()),
+            0x00 if k & 0b111111_00 == 0b000111_00 => BitToC(BitInC(k.into())),
+            0x00 if k & 0b111_00000 == 0b100_00_000 => BitOut1(BitOut((k >> 3).into()), k.into()),
+            0x00 if k & 0b111_00000 == 0b101_00_000 => BitOut2(BitOut((k >> 3).into()), k.into()),
+            0x00 if k & 0b111_00000 == 0b110_00_000 => BitIn1(BitIn((k >> 3).into()), k.into()),
+            0x00 if k & 0b111_00000 == 0b111_00_000 => BitIn2(BitIn((k >> 3).into()), k.into()),
+            0x00 if k & 0b111111_00 == 0b000110_00 => ReadCode(k.into()),
 
-            0x00 if k == 0b00010100 => todo!("WAITWR"),
+            0x00 if k == 0b00010100 => unimplemented!("WAITWR is not implemented"),
 
-            0b000000_1 => OpCode::Clear(Reg(k.into())),
+            0b000000_1 => Clear(Reg(k)),
 
             // immediate byte op
-            0b00101000 => OpCode::MoveImm(k),
-            0b00101001 => OpCode::AndImm(k),
-            0b00101010 => OpCode::OrImm(k),
-            0b00101011 => OpCode::XorImm(k),
-            0b00101100 => OpCode::AddImm(k),
-            0b00101101 => OpCode::SubImm(k),
-            0b00101110 => OpCode::CompareImmNegate(k),
-            0b00101111 => OpCode::CompareImm(k),
+            0b00101000 => MoveImm(k),
+            0b00101001 => AndImm(k),
+            0b00101010 => OrImm(k),
+            0b00101011 => XorImm(k),
+            0b00101100 => AddImm(k),
+            0b00101101 => SubImm(k),
+            0b00101110 => CompareImmNegate(k),
+            0b00101111 => CompareImm(k),
 
-            0b00100000 => OpCode::ReturnImm(k),
-            0b00100001 => OpCode::ReturnErrImm(k),
+            0b00100000 => ReturnImm(k),
+            0b00100001 => ReturnErrImm(k),
 
             // byte op
-            0b00100011 => OpCode::MoveImmToPortDir(k),
-            0b00100101 => OpCode::MoveImmToPortIo(k),
-            0b00100110 => OpCode::MoveImmToP2(k),
-            0b00100111 => OpCode::MoveImmToP2(k),
+            0b00100011 => MoveImmToPortDir(k),
+            0b00100101 => MoveImmToPortIo(k),
+            0b00100110 => MoveImmToP2(k),
+            0b00100111 => MoveImmToP2(k),
 
-            x if x & 0b1111111_0 == 0b0010001_0 => OpCode::MoveImmToIndirAddr1(word.into()),
-            x if x & 0b111111_00 == 0b001001_00 => OpCode::MoveImmToIndirAddr2(word.into()),
+            x if x & 0b1111111_0 == 0b0010001_0 => MoveImmToIndirAddr1(word.into()),
+            x if x & 0b111111_00 == 0b001001_00 => MoveImmToIndirAddr2(word.into()),
 
-            x if x & 0b1111111_0 == 0b0001000_0 => OpCode::MoveA(Reg(word.into())),
+            x if x & 0b1111111_0 == 0b0001000_0 => MoveA(Reg(word.into())),
             x if x & 0b111_0_111_0 == 0b000_0_001_0 => {
-                OpCode::Move(Reg(word.into()), Dest::from(x & 0b000_1_000_0 != 0))
+                Move(Reg(word.into()), Dest::from(x & 0b000_1_000_0 != 0))
             }
 
-            x if x & 0b111_0_1111 == 0b000_0_0100 => {
-                OpCode::Inc(Reg(k), Dest::from(x & 0b000_1_0000 != 0))
-            }
-            x if x & 0b111_0_1111 == 0b000_0_0101 => {
-                OpCode::Dec(Reg(k), Dest::from(x & 0b000_1_0000 != 0))
-            }
+            x if x & 0b111_0_1111 == 0b000_0_0100 => Inc(Reg(k), Dest::from(x & 0b000_1_0000 != 0)),
+            x if x & 0b111_0_1111 == 0b000_0_0101 => Dec(Reg(k), Dest::from(x & 0b000_1_0000 != 0)),
             x if x & 0b111_0_1111 == 0b000_0_0110 => {
-                OpCode::IncAndSkipIfZero(Reg(k), Dest::from(x & 0b000_1_0000 != 0))
+                IncAndSkipIfZero(Reg(k), Dest::from(x & 0b000_1_0000 != 0))
             }
             x if x & 0b111_0_1111 == 0b000_0_0111 => {
-                OpCode::DecAndSkipIfZero(Reg(k), Dest::from(x & 0b000_1_0000 != 0))
+                DecAndSkipIfZero(Reg(k), Dest::from(x & 0b000_1_0000 != 0))
             }
             x if x & 0b111_0_1111 == 0b000_0_1000 => {
-                OpCode::SwapHalfBytes(Reg(k), Dest::from(x & 0b000_1_0000 != 0))
+                SwapHalfBytes(Reg(k), Dest::from(x & 0b000_1_0000 != 0))
             }
-            x if x & 0b111_0_1111 == 0b000_0_1001 => {
-                OpCode::And(Reg(k), Dest::from(x & 0b000_1_0000 != 0))
-            }
-            x if x & 0b111_0_1111 == 0b000_0_1010 => {
-                OpCode::Or(Reg(k), Dest::from(x & 0b000_1_0000 != 0))
-            }
-            x if x & 0b111_0_1111 == 0b000_0_1011 => {
-                OpCode::Xor(Reg(k), Dest::from(x & 0b000_1_0000 != 0))
-            }
-            x if x & 0b111_0_1111 == 0b000_0_1100 => {
-                OpCode::Add(Reg(k), Dest::from(x & 0b000_1_0000 != 0))
-            }
-            x if x & 0b111_0_1111 == 0b000_0_1101 => {
-                OpCode::Sub(Reg(k), Dest::from(x & 0b000_1_0000 != 0))
-            }
+            x if x & 0b111_0_1111 == 0b000_0_1001 => And(Reg(k), Dest::from(x & 0b000_1_0000 != 0)),
+            x if x & 0b111_0_1111 == 0b000_0_1010 => Or(Reg(k), Dest::from(x & 0b000_1_0000 != 0)),
+            x if x & 0b111_0_1111 == 0b000_0_1011 => Xor(Reg(k), Dest::from(x & 0b000_1_0000 != 0)),
+            x if x & 0b111_0_1111 == 0b000_0_1100 => Add(Reg(k), Dest::from(x & 0b000_1_0000 != 0)),
+            x if x & 0b111_0_1111 == 0b000_0_1101 => Sub(Reg(k), Dest::from(x & 0b000_1_0000 != 0)),
             x if x & 0b111_0_1111 == 0b000_0_1110 => {
-                OpCode::RotateLeftWithCarry(Reg(k), Dest::from(x & 0b000_1_0000 != 0))
+                RotateLeftWithCarry(Reg(k), Dest::from(x & 0b000_1_0000 != 0))
             }
             x if x & 0b111_0_1111 == 0b000_0_1111 => {
-                OpCode::RotateRightWithCarry(Reg(k), Dest::from(x & 0b000_1_0000 != 0))
+                RotateRightWithCarry(Reg(k), Dest::from(x & 0b000_1_0000 != 0))
             }
 
             x if x & 0b1111_0000 == 0b0110_0000 => {
                 let label: Label<U12> = Label(word.into());
-                OpCode::Jump(label)
+                Jump(label)
             }
-            x if x & 0b1111_0000 == 0b0111_0000 => OpCode::Call(Label(word.into())),
-            x if x & 0b111111_00 == 0b001100_00 => OpCode::JumpIfZero(Label(word.into())),
-            x if x & 0b111111_00 == 0b001101_00 => OpCode::JumpIfNotZero(Label(word.into())),
-            x if x & 0b111111_00 == 0b001110_00 => OpCode::JumpIfCarry(Label(word.into())),
-            x if x & 0b111111_00 == 0b001111_00 => OpCode::JumpIfNotCarry(Label(word.into())),
-            x if x & 0b1_0000000 == 0b1_0000000 => {
-                OpCode::JumpIfEqual(U7::from(x), Label(u8::from(k)))
-            }
+            x if x & 0b1111_0000 == 0b0111_0000 => Call(Label(word.into())),
+            x if x & 0b111111_00 == 0b001100_00 => JumpIfNotZero(Label(word.into())),
+            x if x & 0b111111_00 == 0b001101_00 => JumpIfZero(Label(word.into())),
+            x if x & 0b111111_00 == 0b001110_00 => JumpIfNotCarry(Label(word.into())),
+            x if x & 0b111111_00 == 0b001111_00 => JumpIfCarry(Label(word.into())),
+            x if x & 0b1_0000000 == 0b1_0000000 => JumpIfEqual(U7::from(x), Label(k)),
 
             // bit op
-            x if x & 0b11111_000 == 0b01000_000 => OpCode::BitClear(Reg(k.into()), x.into()),
-            x if x & 0b11111_000 == 0b01001_000 => OpCode::BitSet(Reg(k.into()), x.into()),
-            x if x & 0b11111_000 == 0b01010_000 => {
-                OpCode::BitTestSkipIfClear(Reg(k.into()), x.into())
-            }
-            x if x & 0b11111_000 == 0b01011_000 => {
-                OpCode::BitTestSkipIfSet(Reg(k.into()), x.into())
-            }
+            x if x & 0b11111_000 == 0b01000_000 => BitClear(Reg(k), x.into()),
+            x if x & 0b11111_000 == 0b01001_000 => BitSet(Reg(k), x.into()),
+            x if x & 0b11111_000 == 0b01010_000 => BitTestSkipIfClear(Reg(k), x.into()),
+            x if x & 0b11111_000 == 0b01011_000 => BitTestSkipIfSet(Reg(k), x.into()),
 
-            _ => {
-                println!("Unknown opcode: {:04X} {:016b}", word, word);
-                todo!()
-            }
+            _ => unimplemented!("Unknown opcode: {word:#04x} {word:#016b}"),
         }
     }
 }
-
-/*
-MOV src, dst
-
-CLR A
-CLR d0
-
-
-*/

@@ -1,7 +1,7 @@
 use crate::{OpCode, U2};
 
 pub fn parse_line(line: &str) -> Result<OpCode, String> {
-    let parts: Vec<&str> = line.trim().split_whitespace().collect();
+    let parts: Vec<&str> = line.split_whitespace().collect();
     if parts.is_empty() {
         return Err("Empty line".to_string());
     }
