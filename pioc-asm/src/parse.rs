@@ -1,8 +1,6 @@
 #![allow(mismatched_lifetime_syntaxes)]
 
-use crate::{Expr, Ident, Stmt};
-
-use pioc_core::{OpCode, U2};
+use crate::{Expr, Ident, Mnemonic, Operand, Stmt};
 
 use std::str::FromStr;
 
@@ -13,7 +11,7 @@ use nom::{
     character::complete::{
         bin_digit1, digit1, hex_digit1, multispace0, none_of, oct_digit1, one_of, satisfy,
     },
-    combinator::{all_consuming, complete, map, map_res, opt, recognize, value},
+    combinator::{all_consuming, complete, map, map_res, opt, recognize, success, value},
     multi::{many0, many1, separated_list1},
     sequence::{delimited, preceded, separated_pair, terminated},
 };
@@ -44,15 +42,16 @@ pub fn parse(asm: impl AsRef<str>) -> Result<Vec<Stmt>, ParseError> {
 
 #[test]
 fn test_parse() {
-    use OpCode::*;
+    use Mnemonic::*;
+    use Operand::*;
     use Stmt::*;
     assert_eq!(parse("").unwrap(), vec![]);
     assert_eq!(parse("  ").unwrap(), vec![]);
     assert_eq!(parse("  \n  ").unwrap(), vec![]);
-    assert_eq!(parse("NOP\nNOP;").unwrap(), vec![Inst(None, Nop); 2]);
+    assert_eq!(parse(" NOP\n NOP;").unwrap(), vec![Inst(None, NOP, Op0); 2]);
     assert_eq!(
-        parse("NOP;comment\nNOP;\n;comment\n;\n").unwrap(),
-        vec![Inst(None, Nop); 2]
+        parse(" NOP;comment\n NOP;\n;comment\n;\n").unwrap(),
+        vec![Inst(None, NOP, Op0); 2]
     );
 }
 
@@ -63,6 +62,7 @@ pub fn parse_line(line: &str) -> Result<Option<Stmt>, ParseError> {
 }
 
 fn parse_line_unchecked(line: &str) -> Result<Option<Stmt>, ParseError> {
+    use Stmt::*;
     if all_consuming(complete((
         multispace0::<&str, nom::error::Error<&str>>,
         tag("END"),
@@ -75,16 +75,17 @@ fn parse_line_unchecked(line: &str) -> Result<Option<Stmt>, ParseError> {
     {
         return Err(ParseError::End);
     }
-    let result = all_consuming(complete(delimited(
-        multispace0,
+    let result = all_consuming(complete(terminated(
         alt((
-            map(equ, |(ident, value)| Some(Stmt::Define(ident, value))),
-            map(org, |addr| Some(Stmt::Origin(addr))),
-            map(include, |s| Some(Stmt::Include(s))),
-            // map(inst, |(label, opcode)| Some(Stmt::Inst(label, opcode))),
-            value(None, multispace0),
+            map(equ, |(ident, value)| Some(Define(ident, value))),
+            map(org, |addr| Some(Origin(addr))),
+            map(include, |s| Some(Include(s))),
+            map(inst, |(label, mnemonic, operand)| {
+                Some(Inst(label, mnemonic, operand))
+            }),
+            success(None),
         )),
-        (multispace0, opt((tag(";"), many0(take(1usize))))),
+        (opt(separator), opt((tag(";"), many0(take(1usize))))),
     )))
     .parse(line)
     .finish();
@@ -97,25 +98,33 @@ fn parse_line_unchecked(line: &str) -> Result<Option<Stmt>, ParseError> {
 #[test]
 fn test_parse_line() {
     use Expr::*;
+    use Mnemonic::*;
+    use Operand::*;
     use Stmt::*;
     assert_eq!(parse_line("").unwrap(), None);
     assert_eq!(parse_line(";").unwrap(), None);
     assert_eq!(parse_line(" ; comment").unwrap(), None);
     assert_eq!(
-        parse(" a EQU 42 ; comment").unwrap(),
-        vec![Define(crate::Ident::from("a"), Num(42))]
+        parse("a EQU 42 ; comment").unwrap(),
+        vec![Define(Ident::from("a"), Num(42))]
     );
-    assert_eq!(parse(" ORG 42 ; comment").unwrap(), vec![Origin(Num(42))]);
+    assert_eq!(parse("ORG 42 ; comment").unwrap(), vec![Origin(Num(42))]);
     assert_eq!(
-        parse(" INCLUDE CH32X035.ASM ; comment").unwrap(),
+        parse("INCLUDE CH32X035.ASM ; comment").unwrap(),
         vec![Include("CH32X035.ASM".to_owned())]
+    );
+    assert_eq!(parse(" NOP").unwrap(), vec![Inst(None, NOP, Op0)]);
+    assert_eq!(parse(" NOP ; comment").unwrap(), vec![Inst(None, NOP, Op0)]);
+    assert_eq!(
+        parse(" ADDL 0x42").unwrap(),
+        vec![Inst(None, ADDL, Op1(Num(0x42)))]
     );
 }
 
 #[cfg(test)]
 use std::fmt::Debug;
 #[cfg(test)]
-fn assert_all_consuming_eq<F, T>(parser: F, input: &str, expected: T)
+fn assert_parse<F, T>(parser: F, input: &str, expected: T)
 where
     F: Fn(&str) -> ParseResult<T>,
     T: PartialEq + Debug,
@@ -143,8 +152,8 @@ fn ident(input: &str) -> ParseResult<Ident> {
 
 #[test]
 fn test_ident() {
-    assert_all_consuming_eq(ident, "abc123", Ident::from("abc123"));
-    assert_all_consuming_eq(ident, "_$#@", Ident::from("_$#@"));
+    assert_parse(ident, "abc123", Ident::from("abc123"));
+    assert_parse(ident, "_$#@", Ident::from("_$#@"));
     assert!(ident("1").is_err());
 }
 
@@ -246,7 +255,7 @@ fn expr(input: &str) -> ParseResult<Expr> {
             )),
             |value| Expr::Num(value),
         ),
-        map(ident, |ident| Expr::Ident(ident)),
+        map(ident, |ident| Expr::Label(ident)),
     ))
     .parse(input)
 }
@@ -254,32 +263,32 @@ fn expr(input: &str) -> ParseResult<Expr> {
 #[test]
 fn test_expr() {
     use Expr::*;
-    assert_all_consuming_eq(expr, "abc123", Ident(crate::Ident::from("abc123")));
-    assert_all_consuming_eq(expr, "42", Num(42));
-    assert_all_consuming_eq(expr, "+42", Num(42));
-    assert_all_consuming_eq(expr, "-42", Num(-42));
-    assert_all_consuming_eq(expr, "0d42", Num(42));
-    assert_all_consuming_eq(expr, "0D42", Num(42));
-    assert_all_consuming_eq(expr, "d'42'", Num(42));
-    assert_all_consuming_eq(expr, "D'42'", Num(42));
-    assert_all_consuming_eq(expr, "0b101010", Num(42));
-    assert_all_consuming_eq(expr, "0B101010", Num(42));
-    assert_all_consuming_eq(expr, "0b0101010", Num(42));
-    assert_all_consuming_eq(expr, "0b0010_1010", Num(42));
-    assert_all_consuming_eq(expr, "b'101010'", Num(42));
-    assert_all_consuming_eq(expr, "B'101010'", Num(42));
-    assert_all_consuming_eq(expr, "b'0101010'", Num(42));
-    assert_all_consuming_eq(expr, "b'0010_1010'", Num(42));
-    assert_all_consuming_eq(expr, "0o42", Num(0o42));
-    assert_all_consuming_eq(expr, "0x42", Num(0x42));
-    assert_all_consuming_eq(expr, "0X42", Num(0x42));
-    assert_all_consuming_eq(expr, "h'42'", Num(0x42));
-    assert_all_consuming_eq(expr, "H'42'", Num(0x42));
-    assert_all_consuming_eq(expr, "'a'", Num('a' as i32));
-    assert_all_consuming_eq(expr, r"'\\'", Num('\\' as i32));
+    assert_parse(expr, "abc123", Label(Ident::from("abc123")));
+    assert_parse(expr, "42", Num(42));
+    assert_parse(expr, "+42", Num(42));
+    assert_parse(expr, "-42", Num(-42));
+    assert_parse(expr, "0d42", Num(42));
+    assert_parse(expr, "0D42", Num(42));
+    assert_parse(expr, "d'42'", Num(42));
+    assert_parse(expr, "D'42'", Num(42));
+    assert_parse(expr, "0b101010", Num(42));
+    assert_parse(expr, "0B101010", Num(42));
+    assert_parse(expr, "0b0101010", Num(42));
+    assert_parse(expr, "0b0010_1010", Num(42));
+    assert_parse(expr, "b'101010'", Num(42));
+    assert_parse(expr, "B'101010'", Num(42));
+    assert_parse(expr, "b'0101010'", Num(42));
+    assert_parse(expr, "b'0010_1010'", Num(42));
+    assert_parse(expr, "0o42", Num(0o42));
+    assert_parse(expr, "0x42", Num(0x42));
+    assert_parse(expr, "0X42", Num(0x42));
+    assert_parse(expr, "h'42'", Num(0x42));
+    assert_parse(expr, "H'42'", Num(0x42));
+    assert_parse(expr, "'a'", Num('a' as i32));
+    assert_parse(expr, r"'\\'", Num('\\' as i32));
     assert!(ident(r"'\'").is_err());
-    assert_all_consuming_eq(expr, r"'\''", Num('\'' as i32));
-    assert_all_consuming_eq(expr, r"'\0'", Num(0x00));
+    assert_parse(expr, r"'\''", Num('\'' as i32));
+    assert_parse(expr, r"'\0'", Num(0x00));
     assert!(ident("0123").is_err());
     assert!(ident("0c123").is_err());
     assert!(ident("1a").is_err());
@@ -293,35 +302,37 @@ fn separator(input: &str) -> ParseResult<()> {
 }
 
 fn equ(input: &str) -> ParseResult<(Ident, Expr)> {
-    separated_pair(label, (tag("EQU"), separator), expr).parse(input)
+    separated_pair(ident, (separator, tag("EQU"), separator), expr).parse(input)
 }
 
 #[test]
 fn test_equ() {
-    assert_all_consuming_eq(equ, "abc EQU 42", (Ident::from("abc"), Expr::Num(42)));
-    assert_all_consuming_eq(equ, "abc EQU 0x42", (Ident::from("abc"), Expr::Num(0x42)));
-    assert_all_consuming_eq(
+    assert_parse(equ, "abc EQU 42", (Ident::from("abc"), Expr::Num(42)));
+    assert_parse(equ, "abc EQU 0x42", (Ident::from("abc"), Expr::Num(0x42)));
+    assert_parse(
         equ,
         "abc EQU L42",
-        (Ident::from("abc"), Expr::Ident(Ident::from("L42"))),
+        (Ident::from("abc"), Expr::Label(Ident::from("L42"))),
     );
+    assert!(equ(" abc EQU 42").is_err());
 }
 
 fn org(input: &str) -> ParseResult<Expr> {
-    preceded((tag("ORG"), separator), expr).parse(input)
+    preceded((multispace0, tag("ORG"), separator), expr).parse(input)
 }
 
 #[test]
 fn test_org() {
     use Expr::*;
-    assert_all_consuming_eq(org, "ORG 42", Num(42));
-    assert_all_consuming_eq(org, "ORG 0x42", Num(0x42));
-    assert_all_consuming_eq(org, "ORG L42", Ident(crate::Ident::from("L42")));
+    assert_parse(org, "ORG 42", Num(42));
+    assert_parse(org, "ORG 0x42", Num(0x42));
+    assert_parse(org, "ORG L42", Label(Ident::from("L42")));
+    assert_parse(org, " ORG L42", Label(Ident::from("L42")));
 }
 
 fn include(input: &str) -> ParseResult<String> {
     preceded(
-        (tag("INCLUDE"), separator),
+        (multispace0, tag("INCLUDE"), separator),
         map(take_till(|c| " \t;".contains(c)), |s: &str| s.to_owned()),
     )
     .parse(input)
@@ -329,32 +340,72 @@ fn include(input: &str) -> ParseResult<String> {
 
 #[test]
 fn test_include() {
-    assert_all_consuming_eq(include, "INCLUDE CH32X035.ASM", "CH32X035.ASM".to_owned());
-    assert_all_consuming_eq(
+    assert_parse(include, "INCLUDE CH32X035.ASM", "CH32X035.ASM".to_owned());
+    assert_parse(include, " INCLUDE CH32X035.ASM", "CH32X035.ASM".to_owned());
+    assert_parse(
         include,
         r"INCLUDE C:\RISC8B\CH533INC.ASM",
         r"C:\RISC8B\CH533INC.ASM".to_owned(),
     );
 }
 
-fn label(input: &str) -> ParseResult<Ident> {
-    terminated(ident, separator).parse(input)
+fn mnemonic(input: &str) -> ParseResult<Mnemonic> {
+    map_res(ident, |Ident(s)| Mnemonic::from_str(&s)).parse(input)
 }
 
-fn operand(input: &str) -> ParseResult<Expr> {
-    todo!()
+#[test]
+fn test_mnemonic() {
+    use Mnemonic::*;
+    assert_parse(mnemonic, "NOP", NOP);
+    assert_parse(mnemonic, "MOVIA", MOVIA);
+    assert_parse(mnemonic, "BC", BC);
+    assert_parse(mnemonic, "MOVA1F", MOVA1F);
+    assert!(mnemonic("HCF").is_err());
 }
 
-fn opcode(input: &str) -> ParseResult<OpCode> {
-    todo!()
+fn operand(input: &str) -> ParseResult<Operand> {
+    use Operand::*;
+    alt((
+        map(
+            (preceded(separator, expr), preceded(separator, expr)),
+            |(value0, value1)| Op2(value0, value1),
+        ),
+        map(preceded(separator, expr), |value| Op1(value)),
+        success(Op0),
+    ))
+    .parse(input)
 }
 
-fn inst(input: &str) -> ParseResult<(Option<Ident>, OpCode)> {
-    (opt(label), opcode).parse(input)
+#[test]
+fn test_operand() {
+    use Expr::*;
+    use Operand::*;
+    assert_parse(operand, "", Op0);
+    assert_parse(operand, " 0x42", Op1(Num(0x42)));
+    assert_parse(operand, " 1, 2", Op2(Num(1), Num(2)));
 }
 
-fn u2(s: &str) -> ParseResult<U2> {
-    todo!()
-    // let value: u8 = s.parse().map_err(|_| "Invalid U2 value".to_string())?;
-    // U2::new(value).ok_or_else(|| "U2 value must be 0, 1, 2, or 3".to_string())
+fn inst(input: &str) -> ParseResult<(Option<Ident>, Mnemonic, Operand)> {
+    (opt(ident), preceded(separator, mnemonic), operand).parse(input)
+}
+
+#[test]
+fn test_inst() {
+    use Expr::*;
+    use Mnemonic::*;
+    use Operand::*;
+    assert_parse(inst, " NOP", (None, NOP, Op0));
+    assert_parse(inst, "NOP NOP", (Some(Ident::from("NOP")), NOP, Op0));
+    assert_parse(inst, " ADDL 0x42", (None, ADDL, Op1(Num(0x42))));
+    assert_parse(
+        inst,
+        "L1 ADDL 0x42",
+        (Some(Ident::from("L1")), ADDL, Op1(Num(0x42))),
+    );
+    assert_parse(
+        inst,
+        "L1:ADDL 0x42",
+        (Some(Ident::from("L1")), ADDL, Op1(Num(0x42))),
+    );
+    assert_parse(inst, " BS 0x9B, 3", (None, BS, Op2(Num(0x9B), Num(3))));
 }

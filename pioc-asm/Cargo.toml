@@ -8,3 +8,4 @@ pioc-core = { path = "../pioc-core" }
 nom = "8"
 thiserror = "2"
 derive_more = { version = "2", features = ["deref", "deref_mut"] }
+strum = { version = "0.27", features = ["derive"] }
