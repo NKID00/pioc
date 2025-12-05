@@ -1,6 +1,6 @@
 use derive_more::{Deref, DerefMut};
 
-#[derive(Debug, Clone, PartialEq, Eq, Deref, DerefMut)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Deref, DerefMut)]
 pub struct Ident(pub String);
 
 impl From<&str> for Ident {
@@ -13,6 +13,7 @@ impl From<&str> for Ident {
 pub enum Expr {
     Label(Ident),
     Num(i32),
+    Add(Ident, i32),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, strum::Display, strum::EnumString)]
@@ -84,6 +85,39 @@ pub enum Mnemonic {
     JNC,
     JC,
     CMPZ,
+    WDT,
+    HALT,
+    PUSH,
+    POP,
+    RETURN,
+    RETOK,
+    RETI,
+    DB,
+    RETER,
+    GOTO,
+    CLRF,
+    MOVAF,
+    MOVF,
+    INCF,
+    DECF,
+    SWAPF,
+    ANDF,
+    IORF,
+    XORF,
+    ADDF,
+    SUBF,
+    RCLF,
+    RCRF,
+    BCF,
+    BSF,
+    BCTCF,
+    INCFSZ,
+    DECFSZ,
+    RLF,
+    RRF,
+    BTFSC,
+    BTFSS,
+    DW,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

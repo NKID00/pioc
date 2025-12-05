@@ -29,7 +29,7 @@ pub enum ParseError {
 
 type ParseResult<'a, T> = IResult<&'a str, T>;
 
-/// Parse a assembly program
+/// Parse an assembly program.
 pub fn parse(asm: impl AsRef<str>) -> Result<Vec<Stmt>, ParseError> {
     let asm = asm.as_ref();
     let prog = asm
@@ -56,7 +56,8 @@ fn test_parse() {
 }
 
 /// Parse a single line of assembly. Panics if argument has more than one line.
-pub fn parse_line(line: &str) -> Result<Option<Stmt>, ParseError> {
+pub fn parse_line(line: impl AsRef<str>) -> Result<Option<Stmt>, ParseError> {
+    let line = line.as_ref();
     assert!(line.lines().count() <= 1);
     parse_line_unchecked(line)
 }

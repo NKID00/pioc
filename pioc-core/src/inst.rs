@@ -2,9 +2,9 @@
 
 use crate::types::*;
 
-/// OpCode of RISC8B, eMCU
+/// Instruction of RISC8B, eMCU
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OpCode {
+pub enum Inst {
     /// NOP
     Nop,
     /// CLRWDT
@@ -245,9 +245,9 @@ pub enum OpCode {
     Unknown(u16),
 }
 
-impl OpCode {
+impl Inst {
     pub fn to_word(&self) -> u16 {
-        use OpCode::*;
+        use Inst::*;
         match self {
             Nop => 0x0000,
             ClearWatchDog => 0x0008,
@@ -314,7 +314,7 @@ impl OpCode {
     }
 
     pub fn to_wch_risc8b_asm(&self) -> String {
-        use OpCode::*;
+        use Inst::*;
         match self {
             Nop => "NOP".to_string(),
             ClearWatchDog => "CLRWDT".to_string(),
@@ -400,8 +400,8 @@ impl OpCode {
         }
     }
 
-    pub fn from_word(word: u16) -> OpCode {
-        use OpCode::*;
+    pub fn from_word(word: u16) -> Inst {
+        use Inst::*;
         let k = (word & 0xFF) as u8;
         match (word >> 8) as u8 {
             0x00 if k & 0b111111_00 == 0x00 => Nop,
@@ -508,12 +508,12 @@ mod tests {
     use std::panic;
 
     #[test]
-    fn exhaust_opcode_except_low_2_bits() {
+    fn exhaust_except_low_2_bits() {
         for i in (0..=0x3fff).map(|i| i << 2) {
-            let Ok(opcode) = panic::catch_unwind(|| OpCode::from_word(i)) else {
+            let Ok(inst) = panic::catch_unwind(|| Inst::from_word(i)) else {
                 continue;
             };
-            assert_eq!(opcode.to_word(), i);
+            assert_eq!(inst.to_word(), i);
         }
     }
 }
