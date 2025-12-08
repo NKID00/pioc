@@ -1,6 +1,10 @@
 pub use pioc_asm::*;
 pub use pioc_core::*;
 
+/// Include an compile-time assembled PIOC program as an array of u16.
+///
+/// ## Example
+///
 /// ```rust
 /// use pioc::pioc;
 ///
@@ -17,8 +21,12 @@ macro_rules! pioc {
     };
 }
 
-/// ```rust
-/// use pioc::pioc;
+/// Include an compile-time assembled PIOC program from an assembly file as an array of u16.
+///
+/// ## Example
+///
+/// ```ignore
+/// use pioc::pioc_include;
 ///
 /// const ROM: [u16; 2] = pioc_include!("ROM.ASM");
 /// ```

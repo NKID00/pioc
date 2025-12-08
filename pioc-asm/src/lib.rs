@@ -1,10 +1,12 @@
 mod assemble;
 mod ast;
 mod parse;
+mod symbol;
 
 pub use assemble::*;
 pub use ast::*;
 pub use parse::*;
+pub use symbol::*;
 
 /// Convenient function to parse and assemble an assembly program.
 pub fn assemble_to_words(asm: String) -> Result<Vec<u16>, AssembleError> {

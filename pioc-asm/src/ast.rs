@@ -23,7 +23,7 @@ pub enum Mnemonic {
     SLEEP,
     SLEEPX,
     WAITB,
-    WAITRO,
+    WAITRD,
     WAITWR,
     WAITSPI,
     RDCODE,

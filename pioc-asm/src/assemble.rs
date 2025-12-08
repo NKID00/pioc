@@ -1,6 +1,6 @@
-use std::{collections::BTreeMap, fs::read_to_string};
+use std::fs::read_to_string;
 
-use crate::{Expr, Ident, Mnemonic, ParseError, Stmt, parse};
+use crate::{Expr, Ident, Mnemonic, Operand, ParseError, Stmt, SymTab, parse, resolve_symbol};
 
 use pioc_core::Inst;
 
@@ -11,6 +11,10 @@ use tracing::warn;
 pub enum AssembleError {
     #[error("invalid op code")]
     InvalidOpCode,
+    #[error("invalid operand")]
+    InvalidOperand,
+    #[error("origin statement not aligned to 2 bytes")]
+    OriginNotAligned,
     #[error("cannot resolve symbol {0:?}")]
     SymbolResolveError(String),
     #[error("parse error")]
@@ -21,12 +25,17 @@ pub enum AssembleError {
 
 /// Assemble statements parsed from assembly program.
 pub fn assemble(prog: &[Stmt]) -> Result<Vec<Inst>, AssembleError> {
+    assemble_with_symbols(&SymTab::default(), prog)
+}
+
+/// Assemble statements parsed from assembly program with custom symbols instead of default builtins.
+pub fn assemble_with_symbols(sym: &SymTab, prog: &[Stmt]) -> Result<Vec<Inst>, AssembleError> {
     let prog = expand_include(prog)?;
-    let sym = resolve_symbol(&prog)?;
+    let sym = resolve_symbol(sym.clone(), &prog)?;
     emit_inst(prog, sym)
 }
 
-type AssembleResult<T> = Result<T, AssembleError>;
+pub(crate) type AssembleResult<T> = Result<T, AssembleError>;
 
 fn expand_include(prog: &[Stmt]) -> AssembleResult<Vec<Stmt>> {
     let mut expanded = Vec::with_capacity(prog.len());
@@ -42,163 +51,100 @@ fn expand_include(prog: &[Stmt]) -> AssembleResult<Vec<Stmt>> {
     Ok(expanded)
 }
 
-type SymTab = BTreeMap<String, i32>;
-
-fn resolve_symbol(prog: &[Stmt]) -> AssembleResult<SymTab> {
-    use Expr::*;
-    use Stmt::*;
-
-    let mut unresolved = BTreeMap::new();
-    let mut origin = Expr::Num(0);
-    let mut offset = 0;
-    for stmt in prog {
-        match stmt {
-            Define(ident, expr) => {
-                unresolved.insert(ident.0.clone(), expr.clone());
-            }
-            Origin(expr) => {
-                origin = expr.clone();
-                offset = 0;
-            }
-            Inst(Some(Ident(label)), _, _) => {
-                match &origin {
-                    Label(ident) => unresolved.insert(label.clone(), Add(ident.clone(), offset)),
-                    Num(v) => unresolved.insert(label.clone(), Num(v + offset)),
-                    Add(_, _) => unreachable!(),
-                };
-                offset += 2;
-            }
-            Inst(_, _, _) => offset += 2,
-            Include(_) => unreachable!(),
-        }
-    }
-
-    let mut sym = BTreeMap::new();
-    loop {
-        let mut resolved = Vec::new();
-        for (name, expr) in unresolved.iter() {
-            match expr {
-                Label(Ident(s)) => {
-                    if let Some(v) = sym.get(s) {
-                        sym.insert(name.clone(), *v);
-                        resolved.push(name.clone());
-                    }
-                }
-                Num(v) => {
-                    sym.insert(name.clone(), *v);
-                    resolved.push(name.clone());
-                }
-                Add(Ident(s), b) => {
-                    if let Some(a) = sym.get(s) {
-                        sym.insert(name.clone(), *a + *b);
-                        resolved.push(name.clone());
-                    }
-                }
-            }
-        }
-        if resolved.is_empty() {
-            break;
-        }
-        for name in resolved {
-            unresolved.remove(&name);
-        }
-    }
-
-    if !unresolved.is_empty() {
-        return Err(AssembleError::SymbolResolveError(
-            unresolved.pop_first().unwrap().0,
-        ));
-    }
-
-    Ok(sym)
-}
-
 fn emit_inst(prog: Vec<Stmt>, sym: SymTab) -> AssembleResult<Vec<Inst>> {
+    use Inst::*;
     use Mnemonic::*;
     let mut insts = Vec::new();
     let mut addr = 0;
     for stmt in prog {
         match stmt {
             Stmt::Origin(expr) => {
-                let v = calc_expr(&expr, &sym)?;
-                if v < addr {
+                let new_addr = calc_expr(&expr, &sym)?;
+                if new_addr % 2 != 0 {
+                    return Err(AssembleError::OriginNotAligned);
+                }
+                if new_addr < addr {
                     warn!("go back by ORG");
                 } else {
-                    let len = insts.len();
-                    let mut padding = vec![Inst::Nop; (v as usize).max(len) - len];
+                    let insts_len = insts.len();
+                    let mut padding = vec![Nop; (new_addr as usize / 2).max(insts_len) - insts_len];
                     insts.append(&mut padding);
                 }
-                addr = v;
+                addr = new_addr;
             }
-            Stmt::Inst(_, mnemonic, operand) => match mnemonic {
-                NOP => todo!(),
-                CLRWDT | WDT => todo!(),
-                SLEEP | HALT => todo!(),
-                SLEEPX => todo!(),
-                WAITB => todo!(),
-                WAITRO => todo!(),
-                WAITWR | WAITSPI => todo!(),
-                RDCODE => todo!(),
-                RCODE => todo!(),
-                WRCODE => todo!(),
-                EXEC => todo!(),
-                PUSHAS | PUSH => todo!(),
-                POPAS | POP => todo!(),
-                PUSHA2 => todo!(),
-                POPA2 => todo!(),
-                RET | RETURN => todo!(),
-                RETZ | RETOK => todo!(),
-                RETIE | RETI => todo!(),
-                CLRA => todo!(),
-                CLR | CLRF => todo!(),
-                MOVA | MOVAF => todo!(),
-                MOV | MOVF => todo!(),
-                INC | INCF => todo!(),
-                DEC | DECF => todo!(),
-                INCSZ | INCFSZ => todo!(),
-                DECSZ | DECFSZ => todo!(),
-                SWAP | SWAPF => todo!(),
-                AND | ANDF => todo!(),
-                IOR | IORF => todo!(),
-                XOR | XORF => todo!(),
-                ADD | ADDF => todo!(),
-                SUB | SUBF => todo!(),
-                RCL | RCLF | RLF => todo!(),
-                RCR | RCRF | RRF => todo!(),
-                RETL | DB => todo!(),
-                RETLN | RETER => todo!(),
-                MOVIP => todo!(),
-                MOVIA => todo!(),
-                MOVA1F => todo!(),
-                MOVA2F => todo!(),
-                MOVA2P => todo!(),
-                MOVA1P => todo!(),
-                MOVL => todo!(),
-                ANDL => todo!(),
-                IORL => todo!(),
-                XORL => todo!(),
-                ADDL => todo!(),
-                SUBL => todo!(),
-                CMPLN => todo!(),
-                CMPL => todo!(),
-                BC | BCF => todo!(),
-                BS | BSF => todo!(),
-                BTSC | BTFSC => todo!(),
-                BTSS | BTFSS => todo!(),
-                BCTC | BCTCF => todo!(),
-                BP1F => todo!(),
-                BP2F => todo!(),
-                BG1F => todo!(),
-                BG2F => todo!(),
-                JMP | GOTO => todo!(),
-                CALL => todo!(),
-                JNZ => todo!(),
-                JZ => todo!(),
-                JNC => todo!(),
-                JC => todo!(),
-                CMPZ => todo!(),
-                DW => todo!(),
-            },
+            Stmt::Inst(_, mnemonic, operand) => {
+                let inst = match mnemonic {
+                    NOP => expect_op0(operand, Nop)?,
+                    CLRWDT | WDT => expect_op0(operand, ClearWatchDog)?,
+                    SLEEP | HALT => expect_op0(operand, Sleep(0.into()))?,
+                    SLEEPX => todo!(),
+                    WAITB => todo!(),
+                    WAITRD => todo!(),
+                    WAITWR | WAITSPI => todo!(),
+                    RDCODE => expect_op0(operand, ReadCode(0.into()))?,
+                    RCODE => todo!(),
+                    WRCODE => todo!(),
+                    EXEC => todo!(),
+                    PUSHAS | PUSH => expect_op0(operand, PushA)?,
+                    POPAS | POP => expect_op0(operand, PopA)?,
+                    PUSHA2 => expect_op0(operand, PushIndirAddr2)?,
+                    POPA2 => expect_op0(operand, PopIndirAddr2)?,
+                    RET | RETURN => expect_op0(operand, Return)?,
+                    RETZ | RETOK => expect_op0(operand, ReturnOk)?,
+                    RETIE | RETI => expect_op0(operand, ReturnInt)?,
+                    CLRA => expect_op0(operand, ClearA)?,
+                    CLR | CLRF => todo!(),
+                    MOVA | MOVAF => todo!(),
+                    MOV | MOVF => todo!(),
+                    INC | INCF => todo!(),
+                    DEC | DECF => todo!(),
+                    INCSZ | INCFSZ => todo!(),
+                    DECSZ | DECFSZ => todo!(),
+                    SWAP | SWAPF => todo!(),
+                    AND | ANDF => todo!(),
+                    IOR | IORF => todo!(),
+                    XOR | XORF => todo!(),
+                    ADD | ADDF => todo!(),
+                    SUB | SUBF => todo!(),
+                    RCL | RCLF | RLF => todo!(),
+                    RCR | RCRF | RRF => todo!(),
+                    RETL | DB => todo!(),
+                    RETLN | RETER => todo!(),
+                    MOVIP => todo!(),
+                    MOVIA => todo!(),
+                    MOVA1F => todo!(),
+                    MOVA2F => todo!(),
+                    MOVA2P => todo!(),
+                    MOVA1P => todo!(),
+                    MOVL => todo!(),
+                    ANDL => todo!(),
+                    IORL => todo!(),
+                    XORL => todo!(),
+                    ADDL => todo!(),
+                    SUBL => todo!(),
+                    CMPLN => todo!(),
+                    CMPL => todo!(),
+                    BC | BCF => todo!(),
+                    BS | BSF => todo!(),
+                    BTSC | BTFSC => todo!(),
+                    BTSS | BTFSS => todo!(),
+                    BCTC | BCTCF => todo!(),
+                    BP1F => todo!(),
+                    BP2F => todo!(),
+                    BG1F => todo!(),
+                    BG2F => todo!(),
+                    JMP | GOTO => todo!(),
+                    CALL => todo!(),
+                    JNZ => todo!(),
+                    JZ => todo!(),
+                    JNC => todo!(),
+                    JC => todo!(),
+                    CMPZ => todo!(),
+                    DW => todo!(),
+                };
+                insts.push(inst);
+                addr += 2;
+            }
             Stmt::Define(_, _) => {}
             Stmt::Include(_) => unreachable!(),
         }
@@ -217,5 +163,26 @@ fn calc_expr(expr: &Expr, sym: &SymTab) -> AssembleResult<i32> {
             Some(a) => Ok(*a + *b),
             None => Err(AssembleError::SymbolResolveError(s.clone())),
         },
+    }
+}
+
+fn expect_op0(operand: Operand, inst: Inst) -> AssembleResult<Inst> {
+    match operand {
+        Operand::Op0 => Ok(inst),
+        _ => Err(AssembleError::InvalidOperand),
+    }
+}
+
+fn expect_op1(operand: Operand) -> AssembleResult<Expr> {
+    match operand {
+        Operand::Op1(v) => Ok(v),
+        _ => Err(AssembleError::InvalidOperand),
+    }
+}
+
+fn expect_op2(operand: Operand) -> AssembleResult<(Expr, Expr)> {
+    match operand {
+        Operand::Op2(v0, v1) => Ok((v0, v1)),
+        _ => Err(AssembleError::InvalidOperand),
     }
 }

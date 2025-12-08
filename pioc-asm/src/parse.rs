@@ -107,7 +107,7 @@ fn test_parse_line() {
     assert_eq!(parse_line(" ; comment").unwrap(), None);
     assert_eq!(
         parse("a EQU 42 ; comment").unwrap(),
-        vec![Define(Ident::from("a"), Num(42))]
+        vec![Define("a".into(), Num(42))]
     );
     assert_eq!(parse("ORG 42 ; comment").unwrap(), vec![Origin(Num(42))]);
     assert_eq!(
@@ -146,15 +146,15 @@ fn ident(input: &str) -> ParseResult<Ident> {
             satisfy(|c| c.is_ascii_alphabetic() || "_$#@".contains(c)),
             many0(satisfy(|c| c.is_ascii_alphanumeric() || "_$#@".contains(c))),
         )),
-        |s: &str| Ident::from(s),
+        |s: &str| s.into(),
     )
     .parse(input)
 }
 
 #[test]
 fn test_ident() {
-    assert_parse(ident, "abc123", Ident::from("abc123"));
-    assert_parse(ident, "_$#@", Ident::from("_$#@"));
+    assert_parse(ident, "abc123", "abc123".into());
+    assert_parse(ident, "_$#@", "_$#@".into());
     assert!(ident("1").is_err());
 }
 
@@ -264,7 +264,7 @@ fn expr(input: &str) -> ParseResult<Expr> {
 #[test]
 fn test_expr() {
     use Expr::*;
-    assert_parse(expr, "abc123", Label(Ident::from("abc123")));
+    assert_parse(expr, "abc123", Label("abc123".into()));
     assert_parse(expr, "42", Num(42));
     assert_parse(expr, "+42", Num(42));
     assert_parse(expr, "-42", Num(-42));
@@ -308,12 +308,12 @@ fn equ(input: &str) -> ParseResult<(Ident, Expr)> {
 
 #[test]
 fn test_equ() {
-    assert_parse(equ, "abc EQU 42", (Ident::from("abc"), Expr::Num(42)));
-    assert_parse(equ, "abc EQU 0x42", (Ident::from("abc"), Expr::Num(0x42)));
+    assert_parse(equ, "abc EQU 42", ("abc".into(), Expr::Num(42)));
+    assert_parse(equ, "abc EQU 0x42", ("abc".into(), Expr::Num(0x42)));
     assert_parse(
         equ,
         "abc EQU L42",
-        (Ident::from("abc"), Expr::Label(Ident::from("L42"))),
+        ("abc".into(), Expr::Label("L42".into())),
     );
     assert!(equ(" abc EQU 42").is_err());
 }
@@ -327,8 +327,8 @@ fn test_org() {
     use Expr::*;
     assert_parse(org, "ORG 42", Num(42));
     assert_parse(org, "ORG 0x42", Num(0x42));
-    assert_parse(org, "ORG L42", Label(Ident::from("L42")));
-    assert_parse(org, " ORG L42", Label(Ident::from("L42")));
+    assert_parse(org, "ORG L42", Label("L42".into()));
+    assert_parse(org, " ORG L42", Label("L42".into()));
 }
 
 fn include(input: &str) -> ParseResult<String> {
@@ -396,17 +396,17 @@ fn test_inst() {
     use Mnemonic::*;
     use Operand::*;
     assert_parse(inst, " NOP", (None, NOP, Op0));
-    assert_parse(inst, "NOP NOP", (Some(Ident::from("NOP")), NOP, Op0));
+    assert_parse(inst, "NOP NOP", (Some("NOP".into()), NOP, Op0));
     assert_parse(inst, " ADDL 0x42", (None, ADDL, Op1(Num(0x42))));
     assert_parse(
         inst,
         "L1 ADDL 0x42",
-        (Some(Ident::from("L1")), ADDL, Op1(Num(0x42))),
+        (Some("L1".into()), ADDL, Op1(Num(0x42))),
     );
     assert_parse(
         inst,
         "L1:ADDL 0x42",
-        (Some(Ident::from("L1")), ADDL, Op1(Num(0x42))),
+        (Some("L1".into()), ADDL, Op1(Num(0x42))),
     );
     assert_parse(inst, " BS 0x9B, 3", (None, BS, Op2(Num(0x9B), Num(3))));
 }
