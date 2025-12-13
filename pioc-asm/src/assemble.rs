@@ -2,7 +2,7 @@ use std::fs::read_to_string;
 
 use crate::{Expr, Ident, Mnemonic, Operand, ParseError, Stmt, SymTab, parse, resolve_symbol};
 
-use pioc_core::Inst;
+use pioc_core::{BitIn, BitInC, BitOut, Dest, Inst, Label, Reg, U2, U3, U7, U9, U10, U12, WaitBit};
 
 use thiserror::Error;
 use tracing::warn;
@@ -59,7 +59,7 @@ fn emit_inst(prog: Vec<Stmt>, sym: SymTab) -> AssembleResult<Vec<Inst>> {
     for stmt in prog {
         match stmt {
             Stmt::Origin(expr) => {
-                let new_addr = calc_expr(&expr, &sym)?;
+                let new_addr = eval(&expr, &sym)?;
                 if new_addr % 2 != 0 {
                     return Err(AssembleError::OriginNotAligned);
                 }
@@ -72,75 +72,85 @@ fn emit_inst(prog: Vec<Stmt>, sym: SymTab) -> AssembleResult<Vec<Inst>> {
                 }
                 addr = new_addr;
             }
-            Stmt::Inst(_, mnemonic, operand) => {
+            Stmt::Inst(_, mnemonic, op) => {
                 let inst = match mnemonic {
-                    NOP => expect_op0(operand, Nop)?,
-                    CLRWDT | WDT => expect_op0(operand, ClearWatchDog)?,
-                    SLEEP | HALT => expect_op0(operand, Sleep(0.into()))?,
-                    SLEEPX => todo!(),
-                    WAITB => todo!(),
-                    WAITRD => todo!(),
-                    WAITWR | WAITSPI => todo!(),
-                    RDCODE => expect_op0(operand, ReadCode(0.into()))?,
-                    RCODE => todo!(),
-                    WRCODE => todo!(),
-                    EXEC => todo!(),
-                    PUSHAS | PUSH => expect_op0(operand, PushA)?,
-                    POPAS | POP => expect_op0(operand, PopA)?,
-                    PUSHA2 => expect_op0(operand, PushIndirAddr2)?,
-                    POPA2 => expect_op0(operand, PopIndirAddr2)?,
-                    RET | RETURN => expect_op0(operand, Return)?,
-                    RETZ | RETOK => expect_op0(operand, ReturnOk)?,
-                    RETIE | RETI => expect_op0(operand, ReturnInt)?,
-                    CLRA => expect_op0(operand, ClearA)?,
-                    CLR | CLRF => todo!(),
-                    MOVA | MOVAF => todo!(),
-                    MOV | MOVF => todo!(),
-                    INC | INCF => todo!(),
-                    DEC | DECF => todo!(),
-                    INCSZ | INCFSZ => todo!(),
-                    DECSZ | DECFSZ => todo!(),
-                    SWAP | SWAPF => todo!(),
-                    AND | ANDF => todo!(),
-                    IOR | IORF => todo!(),
-                    XOR | XORF => todo!(),
-                    ADD | ADDF => todo!(),
-                    SUB | SUBF => todo!(),
-                    RCL | RCLF | RLF => todo!(),
-                    RCR | RCRF | RRF => todo!(),
-                    RETL | DB => todo!(),
-                    RETLN | RETER => todo!(),
-                    MOVIP => todo!(),
-                    MOVIA => todo!(),
-                    MOVA1F => todo!(),
-                    MOVA2F => todo!(),
-                    MOVA2P => todo!(),
-                    MOVA1P => todo!(),
-                    MOVL => todo!(),
-                    ANDL => todo!(),
-                    IORL => todo!(),
-                    XORL => todo!(),
-                    ADDL => todo!(),
-                    SUBL => todo!(),
-                    CMPLN => todo!(),
-                    CMPL => todo!(),
-                    BC | BCF => todo!(),
-                    BS | BSF => todo!(),
-                    BTSC | BTFSC => todo!(),
-                    BTSS | BTFSS => todo!(),
-                    BCTC | BCTCF => todo!(),
-                    BP1F => todo!(),
-                    BP2F => todo!(),
-                    BG1F => todo!(),
-                    BG2F => todo!(),
-                    JMP | GOTO => todo!(),
-                    CALL => todo!(),
-                    JNZ => todo!(),
-                    JZ => todo!(),
-                    JNC => todo!(),
-                    JC => todo!(),
-                    CMPZ => todo!(),
-                    DW => todo!(),
+                    NOP => op0(op, Nop)?,
+                    CLRWDT | WDT => op0(op, ClearWatchDog)?,
+                    SLEEP | HALT => op0(op, Sleep(0.into()))?,
+                    SLEEPX => Sleep(op1(op, &sym)?),
+                    WAITB => WaitB(WaitBit(op1(op, &sym)?)),
+                    WAITRD => WaitB(WaitBit(0.into())),
+                    WAITWR | WAITSPI => WaitB(WaitBit(4.into())),
+                    RDCODE => op0(op, ReadCode(0.into()))?,
+                    RCODE => ReadCode(op1(op, &sym)?),
+                    WRCODE => {
+                        warn!("WRCODE is interpreted as BCTC BI_C_XOR_IN0");
+                        BitToC(BitInC(0.into()))
+                    }
+                    EXEC => {
+                        warn!("EXEC is interpreted as BCTC");
+                        BitToC(BitInC(op1(op, &sym)?))
+                    }
+                    PUSHAS | PUSH => op0(op, PushA)?,
+                    POPAS | POP => op0(op, PopA)?,
+                    PUSHA2 => op0(op, PushIndirAddr2)?,
+                    POPA2 => op0(op, PopIndirAddr2)?,
+                    RET | RETURN => op0(op, Return)?,
+                    RETZ | RETOK => op0(op, ReturnOk)?,
+                    RETIE | RETI => op0(op, ReturnInt)?,
+                    CLRA => op0(op, ClearA)?,
+                    CLR | CLRF => Clear(Reg(op1(op, &sym)?)),
+                    MOVA | MOVAF => MoveA(Reg(op1(op, &sym)?)),
+                    MOV | MOVF => Move(Reg(op2_0(&op, &sym)?), op2_1(&op, &sym)?),
+                    INC | INCF => Inc(Reg(op2_0(&op, &sym)?), op2_1(&op, &sym)?),
+                    DEC | DECF => Dec(Reg(op2_0(&op, &sym)?), op2_1(&op, &sym)?),
+                    INCSZ | INCFSZ => IncAndSkipIfZero(Reg(op2_0(&op, &sym)?), op2_1(&op, &sym)?),
+                    DECSZ | DECFSZ => DecAndSkipIfZero(Reg(op2_0(&op, &sym)?), op2_1(&op, &sym)?),
+                    SWAP | SWAPF => SwapHalfBytes(Reg(op2_0(&op, &sym)?), op2_1(&op, &sym)?),
+                    AND | ANDF => And(Reg(op2_0(&op, &sym)?), op2_1(&op, &sym)?),
+                    IOR | IORF => Or(Reg(op2_0(&op, &sym)?), op2_1(&op, &sym)?),
+                    XOR | XORF => Xor(Reg(op2_0(&op, &sym)?), op2_1(&op, &sym)?),
+                    ADD | ADDF => Add(Reg(op2_0(&op, &sym)?), op2_1(&op, &sym)?),
+                    SUB | SUBF => Sub(Reg(op2_0(&op, &sym)?), op2_1(&op, &sym)?),
+                    RCL | RCLF | RLF => {
+                        RotateLeftWithCarry(Reg(op2_0(&op, &sym)?), op2_1(&op, &sym)?)
+                    }
+                    RCR | RCRF | RRF => {
+                        RotateRightWithCarry(Reg(op2_0(&op, &sym)?), op2_1(&op, &sym)?)
+                    }
+                    RETL | DB => ReturnImm(op1(op, &sym)?),
+                    RETLN | RETER => ReturnErrImm(op1(op, &sym)?),
+                    MOVIP => MoveImmToIndirAddr1(op1(op, &sym)?),
+                    MOVIA => MoveImmToIndirAddr2(op1(op, &sym)?),
+                    MOVA1F => MoveImmToPortDir(op1(op, &sym)?),
+                    MOVA2F => MoveImmToPortIo(op1(op, &sym)?),
+                    MOVA2P => MoveImmToP2(op1(op, &sym)?),
+                    MOVA1P => MoveImmToP1(op1(op, &sym)?),
+                    MOVL => MoveImm(op1(op, &sym)?),
+                    ANDL => AndImm(op1(op, &sym)?),
+                    IORL => OrImm(op1(op, &sym)?),
+                    XORL => XorImm(op1(op, &sym)?),
+                    ADDL => AddImm(op1(op, &sym)?),
+                    SUBL => SubImm(op1(op, &sym)?),
+                    CMPLN => CompareImmNegate(op1(op, &sym)?),
+                    CMPL => CompareImm(op1(op, &sym)?),
+                    BC | BCF => BitClear(Reg(op2_0(&op, &sym)?), op2_1(&op, &sym)?),
+                    BS | BSF => BitSet(Reg(op2_0(&op, &sym)?), op2_1(&op, &sym)?),
+                    BTSC | BTFSC => BitTestSkipIfClear(Reg(op2_0(&op, &sym)?), op2_1(&op, &sym)?),
+                    BTSS | BTFSS => BitTestSkipIfSet(Reg(op2_0(&op, &sym)?), op2_1(&op, &sym)?),
+                    BCTC | BCTCF => BitToC(BitInC(op1(op, &sym)?)),
+                    BP1F => BitOut1(BitOut(op2_0(&op, &sym)?), op2_1(&op, &sym)?),
+                    BP2F => BitOut2(BitOut(op2_0(&op, &sym)?), op2_1(&op, &sym)?),
+                    BG1F => BitIn1(BitIn(op2_0(&op, &sym)?), op2_1(&op, &sym)?),
+                    BG2F => BitIn2(BitIn(op2_0(&op, &sym)?), op2_1(&op, &sym)?),
+                    JMP | GOTO => Jump(Label(op1(op, &sym)?)),
+                    CALL => Call(Label(op1(op, &sym)?)),
+                    JNZ => JumpIfNotZero(Label(op1(op, &sym)?)),
+                    JZ => JumpIfZero(Label(op1(op, &sym)?)),
+                    JNC => JumpIfNotCarry(Label(op1(op, &sym)?)),
+                    JC => JumpIfCarry(Label(op1(op, &sym)?)),
+                    CMPZ => JumpIfEqual(op2_0(&op, &sym)?, Label(op2_1(&op, &sym)?)),
+                    DW => Unknown(op1(op, &sym)?),
                 };
                 insts.push(inst);
                 addr += 2;
@@ -152,7 +162,7 @@ fn emit_inst(prog: Vec<Stmt>, sym: SymTab) -> AssembleResult<Vec<Inst>> {
     Ok(insts)
 }
 
-fn calc_expr(expr: &Expr, sym: &SymTab) -> AssembleResult<i32> {
+fn eval(expr: &Expr, sym: &SymTab) -> AssembleResult<i32> {
     match expr {
         Expr::Label(Ident(s)) => match sym.get(s) {
             Some(v) => Ok(*v),
@@ -166,23 +176,90 @@ fn calc_expr(expr: &Expr, sym: &SymTab) -> AssembleResult<i32> {
     }
 }
 
-fn expect_op0(operand: Operand, inst: Inst) -> AssembleResult<Inst> {
+fn op0(operand: Operand, inst: Inst) -> AssembleResult<Inst> {
+    let Operand::Op0 = operand else {
+        return Err(AssembleError::InvalidOperand);
+    };
+    Ok(inst)
+}
+
+fn op1<T: TryFromExpr>(operand: Operand, sym: &SymTab) -> AssembleResult<T> {
+    let Operand::Op1(v) = operand else {
+        return Err(AssembleError::InvalidOperand);
+    };
+    T::try_from_expr(&v, sym)
+}
+
+fn op2_0<T: TryFromExpr>(operand: &Operand, sym: &SymTab) -> AssembleResult<T> {
+    let (Operand::Op1(v) | Operand::Op2(v, _)) = operand else {
+        return Err(AssembleError::InvalidOperand);
+    };
+    T::try_from_expr(v, sym)
+}
+
+fn op2_1<T: TryFromExpr>(operand: &Operand, sym: &SymTab) -> AssembleResult<T> {
     match operand {
-        Operand::Op0 => Ok(inst),
+        Operand::Op1(_) => T::try_default().ok_or(AssembleError::InvalidOperand),
+        Operand::Op2(_, v) => T::try_from_expr(v, sym),
         _ => Err(AssembleError::InvalidOperand),
     }
 }
 
-fn expect_op1(operand: Operand) -> AssembleResult<Expr> {
-    match operand {
-        Operand::Op1(v) => Ok(v),
-        _ => Err(AssembleError::InvalidOperand),
+trait TryFromExpr
+where
+    Self: Sized,
+{
+    fn try_from_expr(v: &Expr, sym: &SymTab) -> AssembleResult<Self>;
+    fn try_default() -> Option<Self> {
+        None
     }
 }
 
-fn expect_op2(operand: Operand) -> AssembleResult<(Expr, Expr)> {
-    match operand {
-        Operand::Op2(v0, v1) => Ok((v0, v1)),
-        _ => Err(AssembleError::InvalidOperand),
+impl TryFromExpr for Expr {
+    fn try_from_expr(v: &Expr, _sym: &SymTab) -> AssembleResult<Self> {
+        Ok(v.clone())
+    }
+}
+
+trait TryFromExprMarker {}
+
+impl TryFromExprMarker for U2 {}
+impl TryFromExprMarker for U3 {}
+impl TryFromExprMarker for U7 {}
+impl TryFromExprMarker for u8 {}
+impl TryFromExprMarker for U9 {}
+impl TryFromExprMarker for U10 {}
+impl TryFromExprMarker for U12 {}
+impl TryFromExprMarker for u16 {}
+
+impl<T> TryFromExpr for T
+where
+    T: TryFrom<i32> + TryFromExprMarker,
+{
+    fn try_from_expr(v: &Expr, sym: &SymTab) -> AssembleResult<Self> {
+        let v = eval(v, sym)?;
+        let v = v.try_into().or(Err(AssembleError::InvalidOperand))?;
+        Ok(v)
+    }
+}
+
+impl TryFromExpr for Dest {
+    fn try_from_expr(v: &Expr, sym: &SymTab) -> AssembleResult<Self> {
+        if let Expr::Label(Ident(ident)) = v {
+            match ident.to_lowercase().as_str() {
+                "a" => return Ok(Self::A),
+                "f" => return Ok(Self::F),
+                _ => {}
+            }
+        }
+        match eval(v, sym) {
+            Ok(0) => Ok(Self::A),
+            Ok(1) => Ok(Self::F),
+            _ => Err(AssembleError::InvalidOperand),
+        }
+    }
+
+    fn try_default() -> Option<Self> {
+        Some(Self::F)
     }
 }

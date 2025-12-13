@@ -78,7 +78,7 @@ fn main() -> Result<()> {
                 _ => warn!("assembler emits {} instructions", instructions.len()),
             }
             for inst in instructions {
-                println!("{:#04x}", inst.to_word());
+                println!("{:#06x}", inst.to_word());
             }
         }
         Commands::DisOne { value } => {

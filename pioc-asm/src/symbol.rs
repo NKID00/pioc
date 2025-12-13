@@ -2,13 +2,13 @@ use std::collections::BTreeMap;
 
 use derive_more::{Deref, DerefMut};
 
-use crate::{AssembleError, AssembleResult, Expr, Ident, Mnemonic, Operand, Stmt};
+use crate::{AssembleError, AssembleResult, Expr, Ident, Stmt};
 
 #[derive(Debug, Clone, PartialEq, Eq, Deref, DerefMut)]
 pub struct SymTab(BTreeMap<String, i32>);
 
 impl SymTab {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self(BTreeMap::new())
     }
 }
@@ -218,10 +218,10 @@ pub(crate) fn resolve_symbol(mut sym: SymTab, prog: &[Stmt]) -> AssembleResult<S
 
 #[test]
 fn test_resolve_symbol() {
-    use Expr::*;
-    use Mnemonic::*;
-    use Operand::*;
-    use Stmt::*;
+    use crate::Expr::*;
+    use crate::Mnemonic::*;
+    use crate::Operand::*;
+    use crate::Stmt::*;
     assert_eq!(
         resolve_symbol(
             SymTab::new(),

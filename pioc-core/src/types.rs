@@ -24,8 +24,19 @@ macro_rules! define_bit_type {
         }
 
         impl From<$inner> for $name {
-            fn from(x: $inner) -> $name {
+            fn from(x: $inner) -> Self {
                 $name((x & ((1 << $bits) - 1)) as $inner)
+            }
+        }
+
+        impl TryFrom<i32> for $name {
+            type Error = ();
+            fn try_from(x: i32) -> Result<Self, Self::Error> {
+                if x < (1 << $bits) {
+                    Ok((x as $inner).into())
+                } else {
+                    Err(())
+                }
             }
         }
 

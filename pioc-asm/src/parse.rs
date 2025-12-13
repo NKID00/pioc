@@ -199,7 +199,7 @@ fn decimal(input: &str) -> ParseResult<i32> {
         }),
         map_res(
             delimited(alt((tag("d'"), tag("D'"))), digit1, tag("'")),
-            |s| i32::from_str(s),
+            i32::from_str,
         ),
     ))
     .parse(input)
@@ -254,9 +254,9 @@ fn expr(input: &str) -> ParseResult<Expr> {
                 character,
                 nom::character::complete::i32,
             )),
-            |value| Expr::Num(value),
+            Expr::Num,
         ),
-        map(ident, |ident| Expr::Label(ident)),
+        map(ident, Expr::Label),
     ))
     .parse(input)
 }
@@ -371,7 +371,7 @@ fn operand(input: &str) -> ParseResult<Operand> {
             (preceded(separator, expr), preceded(separator, expr)),
             |(value0, value1)| Op2(value0, value1),
         ),
-        map(preceded(separator, expr), |value| Op1(value)),
+        map(preceded(separator, expr), Op1),
         success(Op0),
     ))
     .parse(input)
