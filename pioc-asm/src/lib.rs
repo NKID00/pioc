@@ -9,9 +9,9 @@ pub use parse::*;
 pub use symbol::*;
 
 /// Convenient function to parse and assemble an assembly program.
-pub fn assemble_to_words(asm: String) -> Result<Vec<u16>, AssembleError> {
+pub fn assemble(asm: String) -> Result<Vec<u16>, AssembleError> {
     let statements = parse(asm)?;
-    let instructions = assemble(&statements)?;
+    let instructions = assemble_parsed(&statements)?;
     let words = instructions
         .into_iter()
         .map(|inst| inst.to_word())

@@ -2,7 +2,7 @@
 
 use crate::types::*;
 
-/// Instruction of RISC8B, eMCU
+/// Instruction with resolved constant operands
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Inst {
     /// NOP

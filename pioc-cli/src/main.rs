@@ -71,7 +71,7 @@ fn main() -> Result<()> {
         }
         Commands::AsOne { assembly } => {
             let statements = pioc::parse_line(assembly)?;
-            let instructions = pioc::assemble(statements.as_slice())?;
+            let instructions = pioc::assemble_parsed(statements.as_slice())?;
             match instructions.as_slice() {
                 [] => warn!("assembler emits no instruction"),
                 [_] => {}

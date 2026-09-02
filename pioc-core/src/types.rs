@@ -67,10 +67,8 @@ define_bit_type!(U7, 7, u8);
 define_bit_type!(U9, 9, u16);
 define_bit_type!(U10, 10, u16);
 define_bit_type!(U12, 12, u16);
-// define_bit_type!(U8, 8, u8);
-// define_bit_type!(U16, 16, u16);
 
-/// d
+/// 1-bit Destination
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Dest {
     A,
@@ -112,7 +110,7 @@ impl fmt::Display for Dest {
     }
 }
 
-/// 4 Bit Output Sink
+/// 4-bit Output Sink
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BitOut(pub U2);
 
@@ -134,12 +132,7 @@ impl fmt::Display for BitOut {
     }
 }
 
-/// 4 Bit Input Source
-///
-/// - BIO_FLAG_C   SB_FLAG_C
-/// - BI_BIT_RX_I0 SB_BIT_RX_I0
-/// - BI_PORT_IN0  SB_PORT_IN0
-/// - BI_PORT_IN1  SB_PORT_IN1
+/// 4-bit Input Source
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BitIn(pub U2);
 
@@ -161,12 +154,7 @@ impl fmt::Display for BitIn {
     }
 }
 
-/// 4 Bit Input Source for BCTC
-///
-/// - BI_C_XOR_IN0
-/// - BI_BIT_RX_I0
-/// - BI_PORT_IN0
-/// - BI_PORT_IN1
+/// 4-bit Input Source of BCTC instruction
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BitInC(pub U2);
 
@@ -188,16 +176,8 @@ impl fmt::Display for BitInC {
     }
 }
 
-/*
-WB_DATA_SW_MR_0     EQU   0
-WB_BIT_CYC_TAIL_1   EQU   1
-WB_PORT_I0_FALL     EQU   2
-WB_PORT_I0_RISE     EQU   3
-WB_DATA_MW_SR_1     EQU   4
-WB_PORT_XOR1_1      EQU   5
-WB_PORT_XOR0_0      EQU   6
-WB_PORT_XOR0_1      EQU   7
- */
+
+/// 3-bit Wait Target
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WaitBit(pub U3);
 
@@ -226,8 +206,7 @@ impl<T: fmt::Display> fmt::Display for Label<T> {
     }
 }
 
-/// u8 or U9
-/// SFR 或 RAM 寄存器
+/// 8-bit or 9-bit Register
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Reg<T>(pub T);
 

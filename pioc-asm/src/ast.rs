@@ -120,6 +120,7 @@ pub enum Mnemonic {
     DW,
 }
 
+/// Raw operand with unresolved symbols and could be invalid
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Operand {
     Op0,
@@ -127,7 +128,7 @@ pub enum Operand {
     Op2(Expr, Expr),
 }
 
-/// Represents a raw assembly statement with unresolved symbols and could be invalid.
+/// Raw assembly statement with unresolved symbols and could be invalid
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Stmt {
     Define(Ident, Expr),

@@ -23,13 +23,13 @@ pub enum AssembleError {
     IoError(#[from] std::io::Error),
 }
 
-/// Assemble statements parsed from assembly program.
-pub fn assemble(prog: &[Stmt]) -> Result<Vec<Inst>, AssembleError> {
-    assemble_with_symbols(&SymTab::default(), prog)
+/// Assemble statements parsed from an assembly program.
+pub fn assemble_parsed(prog: &[Stmt]) -> Result<Vec<Inst>, AssembleError> {
+    assemble_parsed_with_symbols(&SymTab::default(), prog)
 }
 
-/// Assemble statements parsed from assembly program with custom symbols instead of default builtins.
-pub fn assemble_with_symbols(sym: &SymTab, prog: &[Stmt]) -> Result<Vec<Inst>, AssembleError> {
+/// Assemble statements parsed from an assembly program with custom symbols instead of default builtins.
+pub fn assemble_parsed_with_symbols(sym: &SymTab, prog: &[Stmt]) -> Result<Vec<Inst>, AssembleError> {
     let prog = expand_include(prog)?;
     let sym = resolve_symbol(sym.clone(), &prog)?;
     emit_inst(prog, sym)
