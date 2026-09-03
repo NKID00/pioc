@@ -29,7 +29,10 @@ pub fn assemble_parsed(prog: &[Stmt]) -> Result<Vec<Inst>, AssembleError> {
 }
 
 /// Assemble statements parsed from an assembly program with custom symbols instead of default builtins.
-pub fn assemble_parsed_with_symbols(sym: &SymTab, prog: &[Stmt]) -> Result<Vec<Inst>, AssembleError> {
+pub fn assemble_parsed_with_symbols(
+    sym: &SymTab,
+    prog: &[Stmt],
+) -> Result<Vec<Inst>, AssembleError> {
     let prog = expand_include(prog)?;
     let sym = resolve_symbol(sym.clone(), &prog)?;
     emit_inst(prog, sym)

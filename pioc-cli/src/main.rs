@@ -1,7 +1,12 @@
-use std::path::PathBuf;
+use std::{
+    fs,
+    io::{Read, Write, stdin, stdout},
+    path::PathBuf,
+};
 
 use clap::{Parser, Subcommand};
 use eyre::Result;
+use pioc::Inst;
 use tracing::{Level, warn};
 use tracing_subscriber::EnvFilter;
 
@@ -64,12 +69,52 @@ fn main() -> Result<()> {
         .init();
     match cli.command {
         Commands::As { output, input } => {
-            todo!();
+            let assembly = if input == *"-" {
+                let mut buf = String::new();
+                stdin().read_to_string(&mut buf)?;
+                buf
+            } else {
+                fs::read_to_string(input)?
+            };
+            let words = pioc::assemble(assembly)?;
+            if words.is_empty() {
+                warn!("assembler emits no instruction");
+            }
+            let bytes: Vec<u8> = words.iter().flat_map(|word| word.to_le_bytes()).collect();
+            match output {
+                Some(output) if output != *"-" => {
+                    fs::write(output, bytes)?;
+                }
+                _ => stdout().write_all(bytes.as_slice())?,
+            }
         }
         Commands::Dis { output, input } => {
-            todo!();
+            let bytes = if input == *"-" {
+                let mut buf = vec![];
+                stdin().read_to_end(&mut buf)?;
+                buf
+            } else {
+                fs::read(input)?
+            };
+            let (chunks, []) = bytes.as_chunks() else {
+                panic!("extra byte found, EOF should be at 16-bit word border");
+            };
+            let asm: String = chunks
+                .iter()
+                .map(|chunk| {
+                    let inst = Inst::from_word(u16::from_le_bytes(*chunk)).to_wch_risc8b_asm();
+                    format!("    {inst}\n")
+                })
+                .collect();
+            match output {
+                Some(output) if output != *"-" => {
+                    fs::write(output, asm.as_bytes())?;
+                }
+                _ => print!("{}", asm),
+            }
         }
-        Commands::AsOne { assembly } => {
+        Commands::AsOne { mut assembly } => {
+            assembly.insert(0, ' '); // insert a no-label mark
             let statements = pioc::parse_line(assembly)?;
             let instructions = pioc::assemble_parsed(statements.as_slice())?;
             match instructions.as_slice() {
@@ -82,7 +127,10 @@ fn main() -> Result<()> {
             }
         }
         Commands::DisOne { value } => {
-            todo!();
+            let value = value.trim().to_lowercase();
+            let value = value.strip_prefix("0x").unwrap_or(&value);
+            let word = u16::from_str_radix(value, 16)?;
+            println!("{}", Inst::from_word(word).to_wch_risc8b_asm());
         }
     }
     Ok(())

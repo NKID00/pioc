@@ -176,7 +176,6 @@ impl fmt::Display for BitInC {
     }
 }
 
-
 /// 3-bit Wait Target
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WaitBit(pub U3);
@@ -214,7 +213,7 @@ impl fmt::Display for Reg<u8> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match Sfr::try_from(self.0) {
             Ok(sfr) => write!(f, "{sfr}"),
-            Err(_) => write!(f, "{:#02x}", self.0),
+            Err(_) => write!(f, "{:#x}", self.0),
         }
     }
 }
@@ -223,10 +222,10 @@ impl fmt::Display for Reg<U9> {
         if self.0.0 <= 0xff {
             match Sfr::try_from(self.0.0 as u8) {
                 Ok(sfr) => write!(f, "{sfr}"),
-                Err(_) => write!(f, "{:#03x}", self.0.0),
+                Err(_) => write!(f, "{:#04x}", self.0.0),
             }
         } else {
-            write!(f, "{:#03x}", self.0.0)
+            write!(f, "{:#04x}", self.0.0)
         }
     }
 }
