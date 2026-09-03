@@ -7,7 +7,7 @@
 //! ```rust
 //! use pioc::pioc;
 //!
-//! const ROM: [u16; 2] = pioc! {"
+//! const ROM: [u8; 4] = pioc! {"
 //!     NOP
 //!     NOP
 //! "};
@@ -18,11 +18,19 @@
 //! ```ignore
 //! use pioc::pioc_include;
 //!
-//! const ROM: [u16; 2] = pioc_include!("ROM.ASM");
+//! const ROM: [u8; 4] = pioc_include!("ROM.ASM");
 //! ```
 
+#![cfg_attr(not(feature = "std"), no_std)]
+
+#[cfg(feature = "std")]
 pub use pioc_asm::*;
+
 pub use pioc_core::*;
+
+#[cfg(feature = "macros")]
+#[doc(hidden)]
+pub use pioc_macros::{pioc_include_inner, pioc_inner};
 
 /// Include an compile-time assembled PIOC program as an array of [u16].
 ///
@@ -31,7 +39,7 @@ pub use pioc_core::*;
 /// ```rust
 /// use pioc::pioc;
 ///
-/// const ROM: [u16; 2] = pioc! {"
+/// const ROM: [u8; 4] = pioc! {"
 ///     NOP
 ///     NOP
 /// "};
@@ -40,7 +48,7 @@ pub use pioc_core::*;
 #[macro_export]
 macro_rules! pioc {
     { $asm:literal } => {
-        pioc_macros::pioc_inner!($asm)
+        $crate::pioc_inner!($asm)
     };
 }
 
@@ -51,13 +59,13 @@ macro_rules! pioc {
 /// ```ignore
 /// use pioc::pioc_include;
 ///
-/// const ROM: [u16; 2] = pioc_include!("ROM.ASM");
+/// const ROM: [u8; 4] = pioc_include!("ROM.ASM");
 /// ```
 #[cfg(feature = "macros")]
 #[macro_export]
 macro_rules! pioc_include {
     ($path:literal) => {
-        pioc_macros::pioc_include_inner!($path)
+        $crate::pioc_include_inner!($path)
     };
 }
 
@@ -69,12 +77,12 @@ mod tests {
             NOP
             NOP
         "};
-        assert_eq!(prog, [0, 0]);
+        assert_eq!(prog, [0, 0, 0, 0]);
     }
 
     #[test]
     fn test_pioc_include() {
         let prog = super::pioc_include!("tests/test.asm");
-        assert_eq!(prog, [0, 0]);
+        assert_eq!(prog, [0, 0, 0, 0]);
     }
 }

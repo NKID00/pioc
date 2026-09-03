@@ -1,5 +1,8 @@
 #![allow(clippy::unusual_byte_groupings)]
 
+#[cfg(feature = "alloc")]
+use alloc::{format, string::String, string::ToString};
+
 use crate::types::*;
 
 /// Instruction with resolved constant operands
@@ -314,6 +317,11 @@ impl Inst {
         }
     }
 
+    pub fn to_bytes(&self) -> [u8; 2] {
+        self.to_word().to_le_bytes()
+    }
+
+    #[cfg(feature = "alloc")]
     pub fn to_wch_risc8b_asm(&self) -> String {
         use Inst::*;
         match self {
@@ -401,7 +409,7 @@ impl Inst {
         }
     }
 
-    pub fn from_word(word: u16) -> Inst {
+    pub fn from_word(word: u16) -> Self {
         use Inst::*;
         let k = (word & 0xFF) as u8;
         match (word >> 8) as u8 {
@@ -501,9 +509,13 @@ impl Inst {
             _ => unimplemented!("Unknown opcode: {word:#04x} {word:#016b}"),
         }
     }
+
+    pub fn from_bytes(bytes: [u8; 2]) -> Self {
+        Self::from_word(u16::from_le_bytes(bytes))
+    }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "std"))]
 mod tests {
     use super::*;
     use std::panic;

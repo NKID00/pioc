@@ -26,7 +26,7 @@ To embed a PIOC program, use `pioc!` macro:
 ```rust
 use pioc::pioc;
 
-const ROM: [u16; 2] = pioc! {"
+const ROM: [u8; 4] = pioc! {"
     NOP
     NOP
 "};
@@ -37,8 +37,10 @@ Or include an assembly file with `pioc_include!` macro:
 ```rust
 use pioc::pioc_include;
 
-const ROM: [u16; 2] = pioc_include!("ROM.ASM");
+const ROM: [u8; 4] = pioc_include!("ROM.ASM");
 ```
+
+It is possible to assemble PIOC programs at runtime with APIs from `pioc` crate with `std` feature enabled, but generally you don't want it to happen on an embedded device. Instead, assemble program snippets at compile-time, then concatenate and modify the binary programmatically.
 
 ## Command Line Interface
 

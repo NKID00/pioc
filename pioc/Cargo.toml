@@ -4,11 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-pioc-asm = { path = "../pioc-asm" }
+pioc-asm = { path = "../pioc-asm", optional = true }
 pioc-core = { path = "../pioc-core" }
 pioc-macros = { path = "../pioc-macros", optional = true }
-thiserror = "2"
 
 [features]
 default = ["macros"]
 macros = ["dep:pioc-macros"]
+std = ["dep:pioc-asm", "pioc-core/std"]
+alloc = ["pioc-core/alloc"]

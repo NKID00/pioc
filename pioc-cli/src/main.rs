@@ -77,11 +77,10 @@ fn main() -> Result<()> {
             } else {
                 fs::read_to_string(input)?
             };
-            let words = pioc::assemble(assembly)?;
-            if words.is_empty() {
+            let bytes = pioc::assemble(assembly)?;
+            if bytes.is_empty() {
                 warn!("assembler emits no instruction");
             }
-            let bytes: Vec<u8> = words.iter().flat_map(|word| word.to_le_bytes()).collect();
             match output {
                 Some(output) if output != *"-" => {
                     fs::write(output, bytes)?;
@@ -103,7 +102,7 @@ fn main() -> Result<()> {
             let asm: String = chunks
                 .iter()
                 .map(|chunk| {
-                    let inst = Inst::from_word(u16::from_le_bytes(*chunk)).to_wch_risc8b_asm();
+                    let inst = Inst::from_bytes(*chunk).to_wch_risc8b_asm();
                     format!("    {inst}\n")
                 })
                 .collect();
