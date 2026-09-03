@@ -30,7 +30,7 @@ pub use pioc_core::*;
 
 #[cfg(feature = "macros")]
 #[doc(hidden)]
-pub use pioc_macros::{pioc_include_inner, pioc_inner};
+pub use pioc_macros as __inner_macros;
 
 /// Include an compile-time assembled PIOC program as an array of [u16].
 ///
@@ -48,7 +48,7 @@ pub use pioc_macros::{pioc_include_inner, pioc_inner};
 #[macro_export]
 macro_rules! pioc {
     { $asm:literal } => {
-        $crate::pioc_inner!($asm)
+        $crate::__inner_macros::pioc_inner!($asm)
     };
 }
 
@@ -65,7 +65,7 @@ macro_rules! pioc {
 #[macro_export]
 macro_rules! pioc_include {
     ($path:literal) => {
-        $crate::pioc_include_inner!($path)
+        $crate::__inner_macros::pioc_include_inner!($path)
     };
 }
 
