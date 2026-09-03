@@ -74,7 +74,7 @@ mod tests {
 
     #[test]
     fn test_pioc_include() {
-        let prog = super::pioc_include!("test.asm");
+        let prog = super::pioc_include!("tests/test.asm");
         assert_eq!(prog, [0, 0]);
     }
 }

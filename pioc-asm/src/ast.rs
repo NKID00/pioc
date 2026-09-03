@@ -1,3 +1,5 @@
+use std::fmt::{Display, Formatter};
+
 use derive_more::{Deref, DerefMut};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Deref, DerefMut)]
@@ -14,6 +16,16 @@ pub enum Expr {
     Label(Ident),
     Num(i32),
     Add(Ident, i32),
+}
+
+impl Display for Expr {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Expr::Label(ident) => write!(f, "{}", ident.0),
+            Expr::Num(v) => write!(f, "{v}"),
+            Expr::Add(ident, v) => write!(f, "{} + {v}", ident.0),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, strum::Display, strum::EnumString)]
@@ -132,8 +144,9 @@ pub enum Operand {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Stmt {
     Define(Ident, Expr),
+    /// Origin address in instructions/words
     Origin(Expr),
     Include(String),
-    /// Label, mnemonic and two operands
-    Inst(Option<Ident>, Mnemonic, Operand),
+    Label(Ident),
+    Inst(Mnemonic, Operand),
 }

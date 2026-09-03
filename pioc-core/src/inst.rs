@@ -222,6 +222,7 @@ pub enum Inst {
 
     /// JMP
     // 0110kkkk kkkkkkkk
+    // jump to instruction/word k
     Jump(Label<U12>),
     /// CALL
     Call(Label<U12>),
@@ -242,7 +243,7 @@ pub enum Inst {
     // 1KKKKKKK kkkkkkkk
     JumpIfEqual(U7, Label<u8>),
 
-    Unknown(u16),
+    DataWord(u16),
 }
 
 impl Inst {
@@ -309,7 +310,7 @@ impl Inst {
             JumpIfNotCarry(k) => 0x3800 | k.0.0,
             JumpIfCarry(k) => 0x3c00 | k.0.0,
             JumpIfEqual(k1, k2) => 0x8000 | ((k1.0 as u16) << 8) | k2.0 as u16,
-            Unknown(op) => *op,
+            DataWord(op) => *op,
         }
     }
 
@@ -396,7 +397,7 @@ impl Inst {
             }
             PushIndirAddr2 => "PUSHA2".to_string(),
             PopIndirAddr2 => "POPA2".to_string(),
-            Unknown(op) => format!("DW {op:#04x}"),
+            DataWord(op) => format!("DW {op:#04x}"),
         }
     }
 

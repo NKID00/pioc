@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use derive_more::{Deref, DerefMut};
+use tracing::trace;
 
 use crate::{AssembleError, AssembleResult, Expr, Ident, Stmt};
 
@@ -155,20 +156,27 @@ pub(crate) fn resolve_symbol(mut sym: SymTab, prog: &[Stmt]) -> AssembleResult<S
         match stmt {
             Define(ident, expr) => {
                 unresolved.insert(ident.0.clone(), expr.clone());
+                trace!("constraint {} = {expr}", ident.0);
             }
             Origin(expr) => {
                 origin = expr.clone();
                 offset = 0;
             }
-            Inst(Some(Ident(label)), _, _) => {
+            Stmt::Label(Ident(label)) => {
                 match &origin {
-                    Label(ident) => unresolved.insert(label.clone(), Add(ident.clone(), offset)),
-                    Num(v) => unresolved.insert(label.clone(), Num(v + offset)),
+                    Expr::Label(ident) => {
+                        unresolved.insert(label.clone(), Add(ident.clone(), offset));
+                        trace!("constraint {label} = {} + {offset}", ident.0);
+                    }
+                    Num(v) => {
+                        let value = v + offset;
+                        unresolved.insert(label.clone(), Num(value));
+                        trace!("constraint {label} = {value}");
+                    }
                     Add(_, _) => unreachable!(),
                 };
-                offset += 2;
             }
-            Inst(_, _, _) => offset += 2,
+            Inst(_, _) => offset += 1,
             Include(_) => unreachable!(),
         }
     }
@@ -177,20 +185,24 @@ pub(crate) fn resolve_symbol(mut sym: SymTab, prog: &[Stmt]) -> AssembleResult<S
         let mut resolved = Vec::new();
         for (name, expr) in unresolved.iter() {
             match expr {
-                Label(Ident(s)) => {
+                Expr::Label(Ident(s)) => {
                     if let Some(v) = sym.get(s).cloned() {
                         sym.insert(name.clone(), v);
                         resolved.push(name.clone());
+                        trace!("resolved {name} = {v}");
                     }
                 }
                 Num(v) => {
                     sym.insert(name.clone(), *v);
                     resolved.push(name.clone());
+                    trace!("resolved {name} = {v}");
                 }
                 Add(Ident(s), b) => {
                     if let Some(a) = sym.get(s).cloned() {
-                        sym.insert(name.clone(), a + *b);
+                        let v = a + *b;
+                        sym.insert(name.clone(), v);
                         resolved.push(name.clone());
+                        trace!("resolved {name} = {v}");
                     }
                 }
             }
@@ -227,17 +239,18 @@ fn test_resolve_symbol() {
             SymTab::new(),
             &[
                 Define("var0".into(), Num(42)),
-                Define("var1".into(), Label("L1".into())),
-                Inst(Some("L0".into()), NOP, Op0),
-                Origin(Label("var0".into())),
-                Inst(None, NOP, Op0),
-                Inst(None, NOP, Op0),
-                Inst(Some("L1".into()), NOP, Op0),
+                Define("var1".into(), Expr::Label("L1".into())),
+                Stmt::Label("L0".into()),
+                Inst(NOP, Op0),
+                Origin(Expr::Label("var0".into())),
+                Inst(NOP, Op0),
+                Stmt::Label("L1".into()),
+                Inst(NOP, Op0),
             ]
         )
         .unwrap(),
         SymTab(
-            [("var0", 42), ("var1", 46), ("L0", 0), ("L1", 46),]
+            [("var0", 42), ("var1", 43), ("L0", 0), ("L1", 43),]
                 .into_iter()
                 .map(|(s, v)| (s.to_owned(), v))
                 .collect()

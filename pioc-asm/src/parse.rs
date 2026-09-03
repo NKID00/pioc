@@ -16,6 +16,7 @@ use nom::{
     sequence::{delimited, preceded, separated_pair, terminated},
 };
 use thiserror::Error;
+use tracing::{trace, warn};
 
 #[derive(Debug, Error)]
 pub enum ParseError {
@@ -31,12 +32,19 @@ type ParseResult<'a, T> = IResult<&'a str, T>;
 
 /// Parse an assembly program.
 pub fn parse(asm: impl AsRef<str>) -> Result<Vec<Stmt>, ParseError> {
-    let asm = asm.as_ref();
-    let prog = asm
-        .lines()
-        .flat_map(|line| parse_line(line).transpose())
-        .take_while(|result| !matches!(result, Err(ParseError::End)))
-        .collect::<Result<Vec<_>, _>>()?;
+    let mut prog = vec![];
+    let mut lines = asm.as_ref().lines();
+    for line in &mut lines {
+        trace!("parsing {line:?}");
+        match parse_line(line) {
+            Ok(mut stmts) => prog.append(&mut stmts),
+            Err(ParseError::End) => break,
+            Err(e) => return Err(e),
+        }
+    }
+    if lines.any(|line| line.chars().any(|c| !(c.is_whitespace() || c == ';'))) {
+        warn!("END reached, ignoring remaining lines");
+    }
     Ok(prog)
 }
 
@@ -48,21 +56,21 @@ fn test_parse() {
     assert_eq!(parse("").unwrap(), vec![]);
     assert_eq!(parse("  ").unwrap(), vec![]);
     assert_eq!(parse("  \n  ").unwrap(), vec![]);
-    assert_eq!(parse(" NOP\n NOP;").unwrap(), vec![Inst(None, NOP, Op0); 2]);
+    assert_eq!(parse(" NOP\n NOP;").unwrap(), vec![Inst(NOP, Op0); 2]);
     assert_eq!(
         parse(" NOP;comment\n NOP;\n;comment\n;\n").unwrap(),
-        vec![Inst(None, NOP, Op0); 2]
+        vec![Inst(NOP, Op0); 2]
     );
 }
 
 /// Parse a single line of assembly. Panics if argument has more than one line.
-pub fn parse_line(line: impl AsRef<str>) -> Result<Option<Stmt>, ParseError> {
+pub fn parse_line(line: impl AsRef<str>) -> Result<Vec<Stmt>, ParseError> {
     let line = line.as_ref();
     assert!(line.lines().count() <= 1);
     parse_line_unchecked(line)
 }
 
-fn parse_line_unchecked(line: &str) -> Result<Option<Stmt>, ParseError> {
+fn parse_line_unchecked(line: &str) -> Result<Vec<Stmt>, ParseError> {
     use Stmt::*;
     if all_consuming(complete((
         multispace0::<&str, nom::error::Error<&str>>,
@@ -78,13 +86,15 @@ fn parse_line_unchecked(line: &str) -> Result<Option<Stmt>, ParseError> {
     }
     let result = all_consuming(complete(terminated(
         alt((
-            map(equ, |(ident, value)| Some(Define(ident, value))),
-            map(org, |addr| Some(Origin(addr))),
-            map(include, |s| Some(Include(s))),
-            map(inst, |(label, mnemonic, operand)| {
-                Some(Inst(label, mnemonic, operand))
+            map(equ, |(ident, value)| vec![Define(ident, value)]),
+            map(org, |addr| vec![Origin(addr)]),
+            map(include, |s| vec![Include(s)]),
+            map(inst, |(label, mnemonic, operand)| match label {
+                Some(label) => vec![Label(label), Inst(mnemonic, operand)],
+                None => vec![Inst(mnemonic, operand)],
             }),
-            success(None),
+            map(ident, |s| vec![Label(s)]),
+            success(vec![]),
         )),
         (opt(separator), opt((tag(";"), many0(take(1usize))))),
     )))
@@ -102,9 +112,9 @@ fn test_parse_line() {
     use Mnemonic::*;
     use Operand::*;
     use Stmt::*;
-    assert_eq!(parse_line("").unwrap(), None);
-    assert_eq!(parse_line(";").unwrap(), None);
-    assert_eq!(parse_line(" ; comment").unwrap(), None);
+    assert_eq!(parse_line("").unwrap(), vec![]);
+    assert_eq!(parse_line(";").unwrap(), vec![]);
+    assert_eq!(parse_line(" ; comment").unwrap(), vec![]);
     assert_eq!(
         parse("a EQU 42 ; comment").unwrap(),
         vec![Define("a".into(), Num(42))]
@@ -114,11 +124,23 @@ fn test_parse_line() {
         parse("INCLUDE CH32X035.ASM ; comment").unwrap(),
         vec![Include("CH32X035.ASM".to_owned())]
     );
-    assert_eq!(parse(" NOP").unwrap(), vec![Inst(None, NOP, Op0)]);
-    assert_eq!(parse(" NOP ; comment").unwrap(), vec![Inst(None, NOP, Op0)]);
+    assert_eq!(parse(" NOP").unwrap(), vec![Inst(NOP, Op0)]);
+    assert_eq!(parse(" NOP ; comment").unwrap(), vec![Inst(NOP, Op0)]);
     assert_eq!(
         parse(" ADDL 0x42").unwrap(),
-        vec![Inst(None, ADDL, Op1(Num(0x42)))]
+        vec![Inst(ADDL, Op1(Num(0x42)))]
+    );
+    assert_eq!(parse("L").unwrap(), vec![Stmt::Label("L".into())]);
+    assert_eq!(parse("L:").unwrap(), vec![Stmt::Label("L".into())]);
+    assert_eq!(parse("L ").unwrap(), vec![Stmt::Label("L".into())]);
+    assert_eq!(parse("L: ").unwrap(), vec![Stmt::Label("L".into())]);
+    assert_eq!(
+        parse("L\t\tNOP").unwrap(),
+        vec![Stmt::Label("L".into()), Stmt::Inst(NOP, Op0)]
+    );
+    assert_eq!(
+        parse("L:\t\tNOP").unwrap(),
+        vec![Stmt::Label("L".into()), Stmt::Inst(NOP, Op0)]
     );
 }
 
@@ -408,5 +430,6 @@ fn test_inst() {
         "L1:ADDL 0x42",
         (Some("L1".into()), ADDL, Op1(Num(0x42))),
     );
+    assert_parse(inst, "L1: NOP", (Some("L1".into()), NOP, Op0));
     assert_parse(inst, " BS 0x9B, 3", (None, BS, Op2(Num(0x9B), Num(3))));
 }

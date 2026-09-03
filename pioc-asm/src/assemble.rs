@@ -1,11 +1,11 @@
-use std::fs::read_to_string;
+use std::{fs::read_to_string, io::ErrorKind::NotFound};
 
 use crate::{Expr, Ident, Mnemonic, Operand, ParseError, Stmt, SymTab, parse, resolve_symbol};
 
 use pioc_core::{BitIn, BitInC, BitOut, Dest, Inst, Label, Reg, U2, U3, U7, U9, U10, U12, WaitBit};
 
 use thiserror::Error;
-use tracing::warn;
+use tracing::{trace, warn};
 
 #[derive(Debug, Error)]
 pub enum AssembleError {
@@ -13,10 +13,12 @@ pub enum AssembleError {
     InvalidOpCode,
     #[error("invalid operand")]
     InvalidOperand,
-    #[error("origin statement not aligned to 2 bytes")]
-    OriginNotAligned,
+    #[error("invalid operand")]
+    InvalidOrigin,
     #[error("cannot resolve symbol {0:?}")]
     SymbolResolveError(String),
+    #[error("include file {0:?} not found")]
+    IncludeNotFound(String),
     #[error("parse error")]
     ParseError(#[from] ParseError),
     #[error("io error")]
@@ -45,8 +47,23 @@ fn expand_include(prog: &[Stmt]) -> AssembleResult<Vec<Stmt>> {
     for stmt in prog {
         match stmt {
             Stmt::Include(path) => {
-                let statments = parse(read_to_string(path)?)?;
-                expanded.extend(expand_include(&statments)?);
+                match read_to_string(path) {
+                    Ok(asm) => {
+                        let statments = parse(asm)?;
+                        expanded.extend(expand_include(&statments)?);
+                        trace!("included {path:?}");
+                    }
+                    Err(e) if e.kind() == NotFound => {
+                        if path.to_uppercase() == "PIOC_INC.ASM" {
+                            warn!(
+                                "include file \"PIOC_INC.ASM\" not found, using default builtins"
+                            );
+                        } else {
+                            return Err(AssembleError::IncludeNotFound(path.to_owned()));
+                        }
+                    }
+                    Err(e) => return Err(e.into()),
+                };
             }
             _ => expanded.push(stmt.clone()),
         }
@@ -63,19 +80,19 @@ fn emit_inst(prog: Vec<Stmt>, sym: SymTab) -> AssembleResult<Vec<Inst>> {
         match stmt {
             Stmt::Origin(expr) => {
                 let new_addr = eval(&expr, &sym)?;
-                if new_addr % 2 != 0 {
-                    return Err(AssembleError::OriginNotAligned);
+                if new_addr < 0 {
+                    return Err(AssembleError::InvalidOrigin);
                 }
                 if new_addr < addr {
                     warn!("go back by ORG");
-                } else {
-                    let insts_len = insts.len();
-                    let mut padding = vec![Nop; (new_addr as usize / 2).max(insts_len) - insts_len];
-                    insts.append(&mut padding);
+                } else if new_addr as usize > insts.len() {
+                    insts.append(&mut vec![Nop; new_addr as usize - insts.len()]);
                 }
+                trace!("origin {addr}");
                 addr = new_addr;
             }
-            Stmt::Inst(_, mnemonic, op) => {
+            Stmt::Label(_) => {}
+            Stmt::Inst(mnemonic, op) => {
                 let inst = match mnemonic {
                     NOP => op0(op, Nop)?,
                     CLRWDT | WDT => op0(op, ClearWatchDog)?,
@@ -153,10 +170,11 @@ fn emit_inst(prog: Vec<Stmt>, sym: SymTab) -> AssembleResult<Vec<Inst>> {
                     JNC => JumpIfNotCarry(Label(op1(op, &sym)?)),
                     JC => JumpIfCarry(Label(op1(op, &sym)?)),
                     CMPZ => JumpIfEqual(op2_0(&op, &sym)?, Label(op2_1(&op, &sym)?)),
-                    DW => Unknown(op1(op, &sym)?),
+                    DW => DataWord(op1(op, &sym)?),
                 };
                 insts.push(inst);
-                addr += 2;
+                trace!("emit {inst:?}");
+                addr += 1;
             }
             Stmt::Define(_, _) => {}
             Stmt::Include(_) => unreachable!(),

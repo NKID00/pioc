@@ -1,6 +1,6 @@
 use std::{
     fs,
-    io::{Read, Write, stdin, stdout},
+    io::{Read, Write, stderr, stdin, stdout},
     path::PathBuf,
 };
 
@@ -66,6 +66,7 @@ fn main() -> Result<()> {
                 )
                 .from_env_lossy(),
         )
+        .with_writer(stderr)
         .init();
     match cli.command {
         Commands::As { output, input } => {
