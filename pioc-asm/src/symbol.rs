@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use derive_more::{Deref, DerefMut};
-use tracing::trace;
+use tracing::{trace, warn};
 
 use crate::{AssembleError, AssembleResult, Expr, Ident, Stmt};
 
@@ -150,12 +150,14 @@ pub(crate) fn resolve_symbol(mut sym: SymTab, prog: &[Stmt]) -> AssembleResult<S
     use Stmt::*;
 
     let mut unresolved = BTreeMap::new();
-    let mut origin = Expr::Num(0);
+    let mut origin = Expr::Const(0);
     let mut offset = 0;
     for stmt in prog {
         match stmt {
             Define(ident, expr) => {
-                unresolved.insert(ident.0.clone(), expr.clone());
+                if unresolved.insert(ident.0.clone(), expr.clone()).is_some() {
+                    warn!("duplicate definition of {:?}", ident.0.clone());
+                }
                 trace!("constraint {} = {expr}", ident.0);
             }
             Origin(expr) => {
@@ -165,15 +167,28 @@ pub(crate) fn resolve_symbol(mut sym: SymTab, prog: &[Stmt]) -> AssembleResult<S
             Stmt::Label(Ident(label)) => {
                 match &origin {
                     Expr::Label(ident) => {
-                        unresolved.insert(label.clone(), Add(ident.clone(), offset));
+                        if unresolved
+                            .insert(
+                                label.clone(),
+                                Add(
+                                    Box::new(Expr::Label(ident.clone())),
+                                    Box::new(Const(offset)),
+                                ),
+                            )
+                            .is_some()
+                        {
+                            warn!("duplicate definition of {label:?}");
+                        }
                         trace!("constraint {label} = {} + {offset}", ident.0);
                     }
-                    Num(v) => {
+                    Const(v) => {
                         let value = v + offset;
-                        unresolved.insert(label.clone(), Num(value));
+                        if unresolved.insert(label.clone(), Const(value)).is_some() {
+                            warn!("duplicate definition of {label:?}");
+                        }
                         trace!("constraint {label} = {value}");
                     }
-                    Add(_, _) => unreachable!(),
+                    _ => unreachable!(),
                 };
             }
             Inst(_, _) => offset += 1,
@@ -184,30 +199,15 @@ pub(crate) fn resolve_symbol(mut sym: SymTab, prog: &[Stmt]) -> AssembleResult<S
     loop {
         let mut resolved = Vec::new();
         for (name, expr) in unresolved.iter() {
-            match expr {
-                Expr::Label(Ident(s)) => {
-                    if let Some(v) = sym.get(s).cloned() {
-                        sym.insert(name.clone(), v);
-                        resolved.push(name.clone());
-                        trace!("resolved {name} = {v}");
-                    }
-                }
-                Num(v) => {
-                    sym.insert(name.clone(), *v);
-                    resolved.push(name.clone());
-                    trace!("resolved {name} = {v}");
-                }
-                Add(Ident(s), b) => {
-                    if let Some(a) = sym.get(s).cloned() {
-                        let v = a + *b;
-                        sym.insert(name.clone(), v);
-                        resolved.push(name.clone());
-                        trace!("resolved {name} = {v}");
-                    }
-                }
+            if let Ok(v) = eval(expr, &sym) {
+                // shadowing builtin is allowed, no warning here
+                sym.insert(name.clone(), v);
+                resolved.push(name.clone());
+                trace!("resolved {name} = {v}");
             }
         }
         if resolved.is_empty() {
+            // either stuck or everything resolved
             break;
         }
         for name in resolved {
@@ -238,7 +238,7 @@ fn test_resolve_symbol() {
         resolve_symbol(
             SymTab::new(),
             &[
-                Define("var0".into(), Num(42)),
+                Define("var0".into(), Const(42)),
                 Define("var1".into(), Expr::Label("L1".into())),
                 Stmt::Label("L0".into()),
                 Inst(NOP, Op0),
@@ -256,4 +256,49 @@ fn test_resolve_symbol() {
                 .collect()
         )
     );
+}
+
+pub(crate) fn eval(expr: &Expr, sym: &SymTab) -> AssembleResult<i32> {
+    use Expr::*;
+    match expr {
+        Label(Ident(s)) => match sym.get(s) {
+            Some(v) => Ok(*v),
+            None => Err(AssembleError::SymbolResolveError(s.clone())),
+        },
+        Const(v) => Ok(*v),
+        Add(a, b)
+        | Sub(a, b)
+        | Mul(a, b)
+        | Div(a, b)
+        | Rem(a, b)
+        | And(a, b)
+        | Or(a, b)
+        | Xor(a, b)
+        | Lsh(a, b)
+        | Rsh(a, b) => {
+            let a = eval(a, sym)?;
+            let b = eval(b, sym)?;
+            Ok(match expr {
+                Add(_, _) => a.wrapping_add(b),
+                Sub(_, _) => a.wrapping_sub(b),
+                Mul(_, _) => a * b,
+                Div(_, _) => a / b,
+                Rem(_, _) => a % b,
+                And(_, _) => a & b,
+                Or(_, _) => a | b,
+                Xor(_, _) => a ^ b,
+                Lsh(_, _) => a << b,
+                Rsh(_, _) => a >> b,
+                _ => unreachable!(),
+            })
+        }
+        Neg(a) | Not(a) => {
+            let a = eval(a, sym)?;
+            Ok(match expr {
+                Neg(_) => -a,
+                Not(_) => !a,
+                _ => unreachable!(),
+            })
+        }
+    }
 }

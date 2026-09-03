@@ -11,10 +11,11 @@ use nom::{
     character::complete::{
         bin_digit1, digit1, hex_digit1, multispace0, none_of, oct_digit1, one_of, satisfy,
     },
-    combinator::{all_consuming, complete, map, map_res, opt, recognize, success, value},
+    combinator::{all_consuming, complete, fail, map, map_res, opt, recognize, success, value},
     multi::{many0, many1, separated_list1},
     sequence::{delimited, preceded, separated_pair, terminated},
 };
+use nom_language::precedence::{Assoc, Operation, binary_op, precedence, unary_op};
 use thiserror::Error;
 use tracing::{trace, warn};
 
@@ -117,9 +118,9 @@ fn test_parse_line() {
     assert_eq!(parse_line(" ; comment").unwrap(), vec![]);
     assert_eq!(
         parse("a EQU 42 ; comment").unwrap(),
-        vec![Define("a".into(), Num(42))]
+        vec![Define("a".into(), Const(42))]
     );
-    assert_eq!(parse("ORG 42 ; comment").unwrap(), vec![Origin(Num(42))]);
+    assert_eq!(parse("ORG 42 ; comment").unwrap(), vec![Origin(Const(42))]);
     assert_eq!(
         parse("INCLUDE CH32X035.ASM ; comment").unwrap(),
         vec![Include("CH32X035.ASM".to_owned())]
@@ -128,7 +129,7 @@ fn test_parse_line() {
     assert_eq!(parse(" NOP ; comment").unwrap(), vec![Inst(NOP, Op0)]);
     assert_eq!(
         parse(" ADDL 0x42").unwrap(),
-        vec![Inst(ADDL, Op1(Num(0x42)))]
+        vec![Inst(ADDL, Op1(Const(0x42)))]
     );
     assert_eq!(parse("L").unwrap(), vec![Stmt::Label("L".into())]);
     assert_eq!(parse("L:").unwrap(), vec![Stmt::Label("L".into())]);
@@ -162,6 +163,19 @@ where
     );
 }
 
+#[cfg(test)]
+fn assert_parse_err<F, T>(parser: F, input: &str)
+where
+    F: Fn(&str) -> ParseResult<T>,
+{
+    assert!(
+        all_consuming(complete(parser))
+            .parse(input)
+            .finish()
+            .is_err()
+    );
+}
+
 fn ident(input: &str) -> ParseResult<Ident> {
     map(
         recognize((
@@ -177,7 +191,12 @@ fn ident(input: &str) -> ParseResult<Ident> {
 fn test_ident() {
     assert_parse(ident, "abc123", "abc123".into());
     assert_parse(ident, "_$#@", "_$#@".into());
-    assert!(ident("1").is_err());
+    assert_parse_err(ident, r"'\'");
+    assert_parse_err(ident, "0123");
+    assert_parse_err(ident, "0c123");
+    assert_parse_err(ident, "1");
+    assert_parse_err(ident, "1a");
+    assert_parse_err(ident, "1 + 1");
 }
 
 fn binary(input: &str) -> ParseResult<i32> {
@@ -223,6 +242,13 @@ fn decimal(input: &str) -> ParseResult<i32> {
             delimited(alt((tag("d'"), tag("D'"))), digit1, tag("'")),
             i32::from_str,
         ),
+        map_res(
+            alt((
+                tag("0"),
+                recognize((one_of("123456789"), many0(one_of("0123456789")))),
+            )),
+            i32::from_str,
+        ),
     ))
     .parse(input)
 }
@@ -264,22 +290,93 @@ fn character(input: &str) -> ParseResult<i32> {
     .parse(input)
 }
 
+fn constant(input: &str) -> ParseResult<i32> {
+    alt((binary, octal, hexadecimal, character, decimal)).parse(input)
+}
+
+#[test]
+fn test_constant() {
+    assert_parse(constant, "0", 0);
+    assert_parse(constant, "42", 42);
+    assert_parse(constant, "0d42", 42);
+    assert_parse(constant, "0D42", 42);
+    assert_parse(constant, "d'42'", 42);
+    assert_parse(constant, "D'42'", 42);
+    assert_parse(constant, "0b101010", 42);
+    assert_parse(constant, "0B101010", 42);
+    assert_parse(constant, "0b0101010", 42);
+    assert_parse(constant, "0b0010_1010", 42);
+    assert_parse(constant, "b'101010'", 42);
+    assert_parse(constant, "B'101010'", 42);
+    assert_parse(constant, "b'0101010'", 42);
+    assert_parse(constant, "b'0010_1010'", 42);
+    assert_parse(constant, "0o42", 0o42);
+    assert_parse(constant, "0x42", 0x42);
+    assert_parse(constant, "0X42", 0x42);
+    assert_parse(constant, "h'42'", 0x42);
+    assert_parse(constant, "H'42'", 0x42);
+    assert_parse(constant, "'a'", 'a' as i32);
+    assert_parse(constant, r"'\\'", '\\' as i32);
+    assert_parse(constant, r"'\''", '\'' as i32);
+    assert_parse(constant, r"'\0'", 0x00);
+    assert_parse_err(constant, "0123");
+}
+
+fn const_or_ident(input: &str) -> ParseResult<Expr> {
+    alt((map(constant, Expr::Const), map(ident, Expr::Label))).parse(input)
+}
+
 fn expr(input: &str) -> ParseResult<Expr> {
-    // TODO: parse arithmetic expressions
-    alt((
-        map(
+    precedence(
+        terminated(
             alt((
-                binary,
-                decimal,
-                octal,
-                hexadecimal,
-                character,
-                nom::character::complete::i32,
+                unary_op(2, tag("+")),
+                unary_op(2, tag("-")),
+                unary_op(2, tag("~")),
             )),
-            Expr::Num,
+            multispace0,
         ),
-        map(ident, Expr::Label),
-    ))
+        fail(),
+        delimited(
+            multispace0,
+            alt((
+                binary_op(4, Assoc::Left, tag("+")),
+                binary_op(4, Assoc::Left, tag("-")),
+                binary_op(3, Assoc::Left, tag("*")),
+                binary_op(3, Assoc::Left, tag("/")),
+                binary_op(3, Assoc::Left, tag("%")),
+                binary_op(8, Assoc::Left, tag("&")),
+                binary_op(10, Assoc::Left, tag("|")),
+                binary_op(9, Assoc::Left, tag("^")),
+                binary_op(5, Assoc::Left, tag("<<")),
+                binary_op(5, Assoc::Left, tag(">>")),
+            )),
+            multispace0,
+        ),
+        alt((
+            const_or_ident,
+            delimited((tag("("), multispace0), expr, (multispace0, tag(")"))),
+        )),
+        |op: Operation<&str, &str, &str, Expr>| {
+            use nom_language::precedence::Operation::*;
+            match op {
+                Binary(a, "+", b) => Ok(Expr::Add(Box::new(a), Box::new(b))),
+                Binary(a, "-", b) => Ok(Expr::Sub(Box::new(a), Box::new(b))),
+                Prefix("+", a) => Ok(a),
+                Prefix("-", a) => Ok(Expr::Neg(Box::new(a))),
+                Binary(a, "*", b) => Ok(Expr::Mul(Box::new(a), Box::new(b))),
+                Binary(a, "/", b) => Ok(Expr::Div(Box::new(a), Box::new(b))),
+                Binary(a, "%", b) => Ok(Expr::Rem(Box::new(a), Box::new(b))),
+                Binary(a, "&", b) => Ok(Expr::And(Box::new(a), Box::new(b))),
+                Binary(a, "|", b) => Ok(Expr::Or(Box::new(a), Box::new(b))),
+                Binary(a, "^", b) => Ok(Expr::Xor(Box::new(a), Box::new(b))),
+                Prefix("~", a) => Ok(Expr::Not(Box::new(a))),
+                Binary(a, "<<", b) => Ok(Expr::Lsh(Box::new(a), Box::new(b))),
+                Binary(a, ">>", b) => Ok(Expr::Rsh(Box::new(a), Box::new(b))),
+                _ => Err(()),
+            }
+        },
+    )
     .parse(input)
 }
 
@@ -287,37 +384,33 @@ fn expr(input: &str) -> ParseResult<Expr> {
 fn test_expr() {
     use Expr::*;
     assert_parse(expr, "abc123", Label("abc123".into()));
-    assert_parse(expr, "42", Num(42));
-    assert_parse(expr, "+42", Num(42));
-    assert_parse(expr, "-42", Num(-42));
-    assert_parse(expr, "0d42", Num(42));
-    assert_parse(expr, "0D42", Num(42));
-    assert_parse(expr, "d'42'", Num(42));
-    assert_parse(expr, "D'42'", Num(42));
-    assert_parse(expr, "0b101010", Num(42));
-    assert_parse(expr, "0B101010", Num(42));
-    assert_parse(expr, "0b0101010", Num(42));
-    assert_parse(expr, "0b0010_1010", Num(42));
-    assert_parse(expr, "b'101010'", Num(42));
-    assert_parse(expr, "B'101010'", Num(42));
-    assert_parse(expr, "b'0101010'", Num(42));
-    assert_parse(expr, "b'0010_1010'", Num(42));
-    assert_parse(expr, "0o42", Num(0o42));
-    assert_parse(expr, "0x42", Num(0x42));
-    assert_parse(expr, "0X42", Num(0x42));
-    assert_parse(expr, "h'42'", Num(0x42));
-    assert_parse(expr, "H'42'", Num(0x42));
-    assert_parse(expr, "'a'", Num('a' as i32));
-    assert_parse(expr, r"'\\'", Num('\\' as i32));
-    assert!(ident(r"'\'").is_err());
-    assert_parse(expr, r"'\''", Num('\'' as i32));
-    assert_parse(expr, r"'\0'", Num(0x00));
-    assert!(ident("0123").is_err());
-    assert!(ident("0c123").is_err());
-    assert!(ident("1a").is_err());
-
-    // TODO: parse arithmetic expressions
-    assert!(ident("1 + 1").is_err());
+    assert_parse_err(expr, r"'\'");
+    assert_parse_err(expr, "0123");
+    assert_parse_err(expr, "0c123");
+    assert_parse_err(expr, "1a");
+    assert_parse(expr, "1", Const(1));
+    assert_parse(expr, "+1", Const(1));
+    assert_parse(expr, "+ 1", Const(1));
+    assert_parse(expr, "-1", Neg(Box::new(Const(1))));
+    assert_parse(expr, "- 1", Neg(Box::new(Const(1))));
+    assert_parse(expr, "1+1", Add(Box::new(Const(1)), Box::new(Const(1))));
+    assert_parse(expr, "1 + 1", Add(Box::new(Const(1)), Box::new(Const(1))));
+    assert_parse(
+        expr,
+        "1 * 2 + 3",
+        Add(
+            Box::new(Mul(Box::new(Const(1)), Box::new(Const(2)))),
+            Box::new(Const(3)),
+        ),
+    );
+    assert_parse(
+        expr,
+        "1 * (2 + 3)",
+        Mul(
+            Box::new(Const(1)),
+            Box::new(Add(Box::new(Const(2)), Box::new(Const(3)))),
+        ),
+    );
 }
 
 fn separator(input: &str) -> ParseResult<()> {
@@ -330,14 +423,11 @@ fn equ(input: &str) -> ParseResult<(Ident, Expr)> {
 
 #[test]
 fn test_equ() {
-    assert_parse(equ, "abc EQU 42", ("abc".into(), Expr::Num(42)));
-    assert_parse(equ, "abc EQU 0x42", ("abc".into(), Expr::Num(0x42)));
-    assert_parse(
-        equ,
-        "abc EQU L42",
-        ("abc".into(), Expr::Label("L42".into())),
-    );
-    assert!(equ(" abc EQU 42").is_err());
+    use Expr::*;
+    assert_parse(equ, "abc EQU 42", ("abc".into(), Const(42)));
+    assert_parse(equ, "abc EQU 0x42", ("abc".into(), Const(0x42)));
+    assert_parse(equ, "abc EQU L42", ("abc".into(), Label("L42".into())));
+    assert_parse_err(equ, " abc EQU 42");
 }
 
 fn org(input: &str) -> ParseResult<Expr> {
@@ -347,8 +437,8 @@ fn org(input: &str) -> ParseResult<Expr> {
 #[test]
 fn test_org() {
     use Expr::*;
-    assert_parse(org, "ORG 42", Num(42));
-    assert_parse(org, "ORG 0x42", Num(0x42));
+    assert_parse(org, "ORG 42", Const(42));
+    assert_parse(org, "ORG 0x42", Const(0x42));
     assert_parse(org, "ORG L42", Label("L42".into()));
     assert_parse(org, " ORG L42", Label("L42".into()));
 }
@@ -383,7 +473,7 @@ fn test_mnemonic() {
     assert_parse(mnemonic, "MOVIA", MOVIA);
     assert_parse(mnemonic, "BC", BC);
     assert_parse(mnemonic, "MOVA1F", MOVA1F);
-    assert!(mnemonic("HCF").is_err());
+    assert_parse_err(mnemonic, "HCF");
 }
 
 fn operand(input: &str) -> ParseResult<Operand> {
@@ -404,8 +494,8 @@ fn test_operand() {
     use Expr::*;
     use Operand::*;
     assert_parse(operand, "", Op0);
-    assert_parse(operand, " 0x42", Op1(Num(0x42)));
-    assert_parse(operand, " 1, 2", Op2(Num(1), Num(2)));
+    assert_parse(operand, " 0x42", Op1(Const(0x42)));
+    assert_parse(operand, " 1, 2", Op2(Const(1), Const(2)));
 }
 
 fn inst(input: &str) -> ParseResult<(Option<Ident>, Mnemonic, Operand)> {
@@ -419,17 +509,17 @@ fn test_inst() {
     use Operand::*;
     assert_parse(inst, " NOP", (None, NOP, Op0));
     assert_parse(inst, "NOP NOP", (Some("NOP".into()), NOP, Op0));
-    assert_parse(inst, " ADDL 0x42", (None, ADDL, Op1(Num(0x42))));
+    assert_parse(inst, " ADDL 0x42", (None, ADDL, Op1(Const(0x42))));
     assert_parse(
         inst,
         "L1 ADDL 0x42",
-        (Some("L1".into()), ADDL, Op1(Num(0x42))),
+        (Some("L1".into()), ADDL, Op1(Const(0x42))),
     );
     assert_parse(
         inst,
         "L1:ADDL 0x42",
-        (Some("L1".into()), ADDL, Op1(Num(0x42))),
+        (Some("L1".into()), ADDL, Op1(Const(0x42))),
     );
     assert_parse(inst, "L1: NOP", (Some("L1".into()), NOP, Op0));
-    assert_parse(inst, " BS 0x9B, 3", (None, BS, Op2(Num(0x9B), Num(3))));
+    assert_parse(inst, " BS 0x9B, 3", (None, BS, Op2(Const(0x9B), Const(3))));
 }

@@ -1,6 +1,6 @@
 use std::{fs::read_to_string, io::ErrorKind::NotFound};
 
-use crate::{Expr, Ident, Mnemonic, Operand, ParseError, Stmt, SymTab, parse, resolve_symbol};
+use crate::{Expr, Ident, Mnemonic, Operand, ParseError, Stmt, SymTab, eval, parse, resolve_symbol};
 
 use pioc_core::{BitIn, BitInC, BitOut, Dest, Inst, Label, Reg, U2, U3, U7, U9, U10, U12, WaitBit};
 
@@ -181,20 +181,6 @@ fn emit_inst(prog: Vec<Stmt>, sym: SymTab) -> AssembleResult<Vec<Inst>> {
         }
     }
     Ok(insts)
-}
-
-fn eval(expr: &Expr, sym: &SymTab) -> AssembleResult<i32> {
-    match expr {
-        Expr::Label(Ident(s)) => match sym.get(s) {
-            Some(v) => Ok(*v),
-            None => Err(AssembleError::SymbolResolveError(s.clone())),
-        },
-        Expr::Num(v) => Ok(*v),
-        Expr::Add(Ident(s), b) => match sym.get(s) {
-            Some(a) => Ok(*a + *b),
-            None => Err(AssembleError::SymbolResolveError(s.clone())),
-        },
-    }
 }
 
 fn op0(operand: Operand, inst: Inst) -> AssembleResult<Inst> {

@@ -14,16 +14,38 @@ impl From<&str> for Ident {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expr {
     Label(Ident),
-    Num(i32),
-    Add(Ident, i32),
+    Const(i32),
+    Add(Box<Expr>, Box<Expr>),
+    Sub(Box<Expr>, Box<Expr>),
+    Neg(Box<Expr>),
+    Mul(Box<Expr>, Box<Expr>),
+    Div(Box<Expr>, Box<Expr>),
+    Rem(Box<Expr>, Box<Expr>),
+    And(Box<Expr>, Box<Expr>),
+    Or(Box<Expr>, Box<Expr>),
+    Xor(Box<Expr>, Box<Expr>),
+    Not(Box<Expr>),
+    Lsh(Box<Expr>, Box<Expr>),
+    Rsh(Box<Expr>, Box<Expr>),
 }
 
 impl Display for Expr {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Expr::Label(ident) => write!(f, "{}", ident.0),
-            Expr::Num(v) => write!(f, "{v}"),
-            Expr::Add(ident, v) => write!(f, "{} + {v}", ident.0),
+            Expr::Const(v) => write!(f, "{v}"),
+            Expr::Add(a, b) => write!(f, "({a} + {b})"),
+            Expr::Sub(a, b) => write!(f, "({a} - {b})"),
+            Expr::Neg(a) => write!(f, "(-{a})"),
+            Expr::Mul(a, b) => write!(f, "({a} * {b})"),
+            Expr::Div(a, b) => write!(f, "({a} / {b})"),
+            Expr::Rem(a, b) => write!(f, "({a} % {b})"),
+            Expr::And(a, b) => write!(f, "({a} & {b})"),
+            Expr::Or(a, b) => write!(f, "({a} | {b})"),
+            Expr::Xor(a, b) => write!(f, "({a} ^ {b})"),
+            Expr::Not(a) => write!(f, "(~{a})"),
+            Expr::Lsh(a, b) => write!(f, "({a} << {b})"),
+            Expr::Rsh(a, b) => write!(f, "({a} >> {b})"),
         }
     }
 }
