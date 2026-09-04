@@ -65,7 +65,7 @@ To build PIOC programs at runtime, it is possible to assemble on the fly by call
 Install with cargo:
 
 ```
-cargo install --git https://github.com/NKID00/pioc.git --branch master --locked pioc
+cargo install --git https://github.com/NKID00/pioc.git --branch master --locked pioc-cli
 ```
 
 ```
