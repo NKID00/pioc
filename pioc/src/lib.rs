@@ -41,6 +41,7 @@
 //!
 
 #![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 #[cfg(feature = "std")]
 pub use pioc_asm::*;
