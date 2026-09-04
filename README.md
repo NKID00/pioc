@@ -26,9 +26,12 @@ To embed a PIOC program, use `pioc!` macro:
 ```rust
 use pioc::pioc;
 
-const ROM: [u8; 4] = pioc! {"
-    NOP
-    NOP
+// this example program toggles IO1 at 1/4 PIOC clock speed
+const ROM: [u8; 8] = pioc! {"
+LOOP:   BS SFR_PORT_IO, SB_PORT_OUT1    ; set IO1 to high
+        NOP
+        BC SFR_PORT_IO, SB_PORT_OUT1    ; set IO1 to low
+        JMP LOOP
 "};
 ```
 
@@ -69,5 +72,6 @@ Options:
 
 ## Differences from Official Assembler
 
+- EOF indicator `END` is not necessary.
 - Builtin constants are available by default, `PIOC_INC.ASM` is no longer needed.
 - Expressions are parsed and evaluated conforming to regular C operator associativity and precedence, and may have parenthesis (human-readable expressions are always welcome!). This is quite different from the official assembler where every operator is associated from right to left, and parenthesis are not allowed.

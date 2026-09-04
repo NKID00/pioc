@@ -10,20 +10,20 @@ use syn::{LitStr, parse_macro_input};
 #[proc_macro_error]
 #[proc_macro]
 pub fn pioc_inner(input: TokenStream) -> TokenStream {
-    set_dummy(quote! { panic!() });
+    set_dummy(quote! { compile_error!("assemble failed") });
     let literal = parse_macro_input!(input as LitStr);
     let asm = literal.value();
-    let words = assemble(asm).unwrap_or_else(|e| abort!(literal, e.to_string()));
-    quote! { [#(#words),*] }.into()
+    let bytes = assemble(asm).unwrap_or_else(|e| abort!(literal, e.to_string()));
+    quote! { [#(#bytes),*] }.into()
 }
 
 #[proc_macro_error]
 #[proc_macro]
 pub fn pioc_include_inner(input: TokenStream) -> TokenStream {
-    set_dummy(quote! { panic!() });
+    set_dummy(quote! { compile_error!("assemble failed") });
     let literal = parse_macro_input!(input as LitStr);
     let path = PathBuf::from(literal.value());
     let asm = std::fs::read_to_string(path).unwrap_or_else(|e| abort!(literal, e.to_string()));
-    let words = assemble(asm).unwrap_or_else(|e| abort!(literal, e.to_string()));
-    quote! { [#(#words),*] }.into()
+    let bytes = assemble(asm).unwrap_or_else(|e| abort!(literal, e.to_string()));
+    quote! { [#(#bytes),*] }.into()
 }

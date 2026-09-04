@@ -7,9 +7,12 @@
 //! ```rust
 //! use pioc::pioc;
 //!
-//! const ROM: [u8; 4] = pioc! {"
-//!     NOP
-//!     NOP
+//! // this example program toggles IO1 at 1/4 PIOC clock speed
+//! const ROM: [u8; 8] = pioc! {"
+//! LOOP:   BS SFR_PORT_IO, SB_PORT_OUT1    ; set IO1 to high
+//!         NOP
+//!         BC SFR_PORT_IO, SB_PORT_OUT1    ; set IO1 to low
+//!         JMP LOOP
 //! "};
 //! ```
 //!
@@ -39,9 +42,12 @@ pub use pioc_macros as __inner_macros;
 /// ```rust
 /// use pioc::pioc;
 ///
-/// const ROM: [u8; 4] = pioc! {"
-///     NOP
-///     NOP
+/// // this example program toggles IO1 at 1/4 PIOC clock speed
+/// const ROM: [u8; 8] = pioc! {"
+/// LOOP:   BS SFR_PORT_IO, SB_PORT_OUT1    ; set IO1 to high
+///         NOP
+///         BC SFR_PORT_IO, SB_PORT_OUT1    ; set IO1 to low
+///         JMP LOOP
 /// "};
 /// ```
 #[cfg(feature = "macros")]
@@ -74,15 +80,17 @@ mod tests {
     #[test]
     fn test_pioc() {
         let prog = super::pioc! {"
-            NOP
-            NOP
+LOOP:   BS SFR_PORT_IO, SB_PORT_OUT1    ; set IO1 to high
+        NOP
+        BC SFR_PORT_IO, SB_PORT_OUT1    ; set IO1 to low
+        JMP LOOP
         "};
-        assert_eq!(prog, [0, 0, 0, 0]);
+        assert_eq!(prog, [0x0b, 0x49, 0x00, 0x00, 0x0b, 0x41, 0x00, 0x60]);
     }
 
     #[test]
     fn test_pioc_include() {
         let prog = super::pioc_include!("tests/test.asm");
-        assert_eq!(prog, [0, 0, 0, 0]);
+        assert_eq!(prog, [0x0b, 0x49, 0x00, 0x00, 0x0b, 0x41, 0x00, 0x60]);
     }
 }
