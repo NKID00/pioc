@@ -26,12 +26,14 @@ To embed a PIOC program, use `pioc!` macro:
 ```rust
 use pioc::pioc;
 
-// this example program toggles IO1 at 1/4 PIOC clock speed
-const ROM: [u8; 8] = pioc! {"
+// this example program toggles IO1 at 1/6 clock speed with 50% duty cycle
+const ROM: [u8; 12] = pioc! {"
+        BS SFR_PORT_DIR, SB_PORT_DIR1   ; set IO1 to output
 LOOP:   BS SFR_PORT_IO, SB_PORT_OUT1    ; set IO1 to high
         NOP
+        NOP
         BC SFR_PORT_IO, SB_PORT_OUT1    ; set IO1 to low
-        JMP LOOP
+        JMP LOOP                        ; jump takes 2 cycles
 "};
 ```
 
