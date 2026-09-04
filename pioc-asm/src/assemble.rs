@@ -29,17 +29,18 @@ pub enum AssembleError {
 
 /// Assemble statements parsed from an assembly program.
 pub fn assemble_parsed(prog: &[Stmt]) -> Result<Vec<Inst>, AssembleError> {
-    assemble_parsed_with_symbols(&SymTab::default(), prog)
+    Ok(assemble_parsed_with_symbols(&SymTab::default(), prog)?.1)
 }
 
-/// Assemble statements parsed from an assembly program with custom symbols instead of default builtins.
+/// Assemble statements parsed from an assembly program with custom symbols
+/// instead of default builtins. Returns resolved symbols.
 pub fn assemble_parsed_with_symbols(
     sym: &SymTab,
     prog: &[Stmt],
-) -> Result<Vec<Inst>, AssembleError> {
+) -> Result<(SymTab, Vec<Inst>), AssembleError> {
     let prog = expand_include(prog)?;
     let sym = resolve_symbol(sym.clone(), &prog)?;
-    emit_inst(prog, sym)
+    Ok((sym.clone(), emit_inst(prog, sym)?))
 }
 
 pub(crate) type AssembleResult<T> = Result<T, AssembleError>;

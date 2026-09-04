@@ -42,10 +42,23 @@ Or include an assembly file with `pioc_include!` macro:
 ```rust
 use pioc::pioc_include;
 
-const ROM: [u8; 4] = pioc_include!("ROM.ASM");
+const ROM: [u8; 12] = pioc_include!("ROM.ASM");
 ```
 
-It is possible to assemble PIOC programs at runtime with APIs from `pioc` crate with `std` feature enabled, but generally you don't want it to happen on an embedded device. Instead, assemble program snippets at compile-time, then concatenate and modify the binary programmatically.
+Export symbols to retrieve label address:
+
+```rust
+let (rom, func_a_addr, start_addr) = pioc! {"
+            ORG 0x000
+FUNC_A:     NOP
+
+            ORG 0x100   ; subsequent instructions start at address 0x100
+START:      NOP
+
+", "FUNC_A", "START"};  // export these symbols
+```
+
+To build PIOC programs at runtime, it is possible to assemble on the fly by calling `pioc::assemble` (`std` required). But generally you don't want it to happen on an embedded device. Instead, prepare program snippets assembled at compile-time, then concatenate and modify the binary form programmatically. Or build programs with `pioc::Inst` enum representing instructions, then convert them into bytes by calling `pioc::Inst::to_bytes`.
 
 ## Command Line Interface
 
@@ -74,6 +87,6 @@ Options:
 
 ## Differences from Official Assembler
 
-- EOF indicator `END` is not necessary.
-- Builtin constants are available by default, `PIOC_INC.ASM` is no longer needed.
+- EOF indicator `END` is no longer necessary.
+- Builtin constants from `PIOC_INC.ASM` are available by default and doesn't require manual inclusion.
 - Expressions are parsed and evaluated conforming to regular C operator associativity and precedence, and may have parenthesis (human-readable expressions are always welcome!). This is quite different from the official assembler where every operator is associated from right to left, and parenthesis are not allowed.
