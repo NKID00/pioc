@@ -1,0 +1,37 @@
+name: ci
+
+on: [push]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/cache@v6
+        id: cargo
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}
+      - uses: actions/cache@v6
+        id: target
+        with:
+          path: |
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check
+        run: |
+          cargo check --workspace
+          cargo check --workspace --all-features
+          cargo check --workspace --no-default-features
+      - name: Test
+        run: |
+          cargo test --workspace
+          cargo test --workspace --all-features
+          cargo test --workspace --no-default-features
